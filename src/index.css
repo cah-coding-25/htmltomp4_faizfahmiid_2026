@@ -1,0 +1,109 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+/* Hide scrollbar for IE, Edge and Firefox */
+.scrollbar-none {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* ==========================================================================
+   ROYAL OBSIDIAN GOLD (PREMIUM DARK THEME) OVERRIDES
+   ========================================================================== */
+.luxury-gold {
+  color-scheme: dark;
+}
+
+/* Obsidian pitch black base background */
+.luxury-gold.dark,
+.luxury-gold .dark\:bg-slate-900,
+.luxury-gold .dark\:bg-slate-950,
+.luxury-gold .bg-slate-50,
+.luxury-gold .bg-slate-100 {
+  background-color: #070604 !important;
+}
+
+.luxury-gold .bg-white {
+  background-color: #0d0a07 !important;
+}
+
+/* Luxurious gold borders */
+.luxury-gold .border-slate-100,
+.luxury-gold .dark\:border-slate-900,
+.luxury-gold .dark\:border-slate-900\/50,
+.luxury-gold .border-slate-200,
+.luxury-gold .dark\:border-slate-800,
+.luxury-gold .dark\:border-slate-800\/80,
+.luxury-gold .border-slate-200\/50,
+.luxury-gold .dark\:border-slate-800\/50 {
+  border-color: rgba(245, 158, 11, 0.12) !important;
+}
+
+/* Redirect primary emerald colors to Royal Gold / Amber */
+.luxury-gold .text-emerald-500,
+.luxury-gold .text-emerald-400 {
+  color: #fbbf24 !important; /* amber-400 */
+}
+
+.luxury-gold .text-emerald-600 {
+  color: #fbbf24 !important;
+}
+
+.luxury-gold .text-emerald-700,
+.luxury-gold .text-emerald-800,
+.luxury-gold .dark\:text-emerald-300 {
+  color: #fde68a !important; /* amber-200 */
+}
+
+.luxury-gold .bg-emerald-500 {
+  background-image: linear-gradient(to right, #f59e0b, #d97706) !important;
+  background-color: #f59e0b !important;
+  color: #000000 !important;
+}
+
+.luxury-gold .bg-emerald-600 {
+  background-image: linear-gradient(to right, #f59e0b, #d97706) !important;
+  background-color: #f59e0b !important;
+  color: #000000 !important;
+}
+
+.luxury-gold .hover\:bg-emerald-700:hover {
+  background-image: linear-gradient(to right, #fbbf24, #f59e0b) !important;
+  background-color: #fbbf24 !important;
+  color: #000000 !important;
+}
+
+.luxury-gold .bg-emerald-50,
+.luxury-gold .dark\:bg-emerald-950\/20 {
+  background-color: rgba(245, 158, 11, 0.05) !important;
+}
+
+.luxury-gold .border-emerald-100,
+.luxury-gold .dark\:border-emerald-900\/30 {
+  border-color: rgba(245, 158, 11, 0.2) !important;
+}
+
+/* Beautiful custom input fields in Royal Gold */
+.luxury-gold input:focus,
+.luxury-gold textarea:focus {
+  border-color: rgba(245, 158, 11, 0.6) !important;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.15) !important;
+}
+
+/* Custom premium scrollbar for gold mode */
+.luxury-gold ::-webkit-scrollbar-thumb {
+  background-color: rgba(245, 158, 11, 0.2) !important;
+  border-radius: 9999px !important;
+}
+.luxury-gold ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(245, 158, 11, 0.4) !important;
+}

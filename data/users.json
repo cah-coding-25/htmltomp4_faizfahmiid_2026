@@ -1,0 +1,58 @@
+[
+  {
+    "id": "usr_admin_01",
+    "name": "Administrator Utama",
+    "email": "admin@fahkeu.id",
+    "username": "admin",
+    "password": "admin123",
+    "role": "admin",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "status": "active",
+    "googleSheetUrl": "",
+    "telegramBotToken": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
+    "telegramChatId": "847926189",
+    "useCloudStorage": false
+  },
+  {
+    "id": "usr_faiz_02",
+    "name": "Faiz Fahmi",
+    "email": "faiz@fahkeu.id",
+    "username": "faiz",
+    "password": "user123",
+    "role": "user",
+    "createdAt": "2026-01-02T10:00:00.000Z",
+    "status": "active",
+    "googleSheetUrl": "",
+    "telegramBotToken": "",
+    "telegramChatId": "",
+    "useCloudStorage": false
+  },
+  {
+    "id": "usr_1789629718761_kmz2",
+    "name": "Faiz Fahmi",
+    "email": "cahsantriit@gmail.com",
+    "username": "faizfahmiID25",
+    "password": "user12345",
+    "role": "user",
+    "createdAt": "2026-09-17T07:21:58.761Z",
+    "status": "active",
+    "googleSheetUrl": "https://script.google.com/macros/s/AKfycbwxBMwwTBx06HDrnyNH7oPtXe9y0dA0I_QMFa739S80FixHUCd-Ikb8SeVf8EFj_Ax9/exec",
+    "telegramBotToken": "8896893885:AAF09hw-3RTEvS7YXCUno_VsiSsXRoqC7Yw",
+    "telegramChatId": "7900068001",
+    "useCloudStorage": true
+  },
+  {
+    "id": "usr_1789858761976_4ybl",
+    "name": "Faiz Fahmi",
+    "email": "cahsantriit@gmail.com",
+    "username": "faizfahmi",
+    "password": "user12345",
+    "role": "user",
+    "createdAt": "2026-09-19T22:00:00.000Z",
+    "status": "active",
+    "googleSheetUrl": "https://script.google.com/macros/s/AKfycbwxBMwwTBx06HDrnyNH7oPtXe9y0dA0I_QMFa739S80FixHUCd-Ikb8SeVf8EFj_Ax9/exec",
+    "telegramBotToken": "8896893885:AAF09hw-3RTEvS7YXCUno_VsiSsXRoqC7Yw",
+    "telegramChatId": "7900068001",
+    "useCloudStorage": true
+  }
+]

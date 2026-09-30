@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-11",
+  "todayCount": 0,
+  "dailyQuotaLimit": 1500,
+  "remainingToday": 1500,
+  "totalAllTimeCount": 0,
+  "todayFallbackCount": 0,
+  "totalFallbackCount": 0,
+  "lastUsedAt": "",
+  "lastStatus": "idle",
+  "lastError": "",
+  "latencyMs": 0
+}
