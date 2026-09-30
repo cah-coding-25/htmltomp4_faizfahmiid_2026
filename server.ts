@@ -371,39 +371,53 @@ async function pushTransactionToGoogleSheet(
       payload.transactions = Array.isArray(data) ? data : [data];
     }
 
-    const res = await fetch(sheetUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(15000)
-    });
-
-    if (!res.ok) {
-      // Fallback via GET query jika POST terhambat redirect CORS di Apps Script
-      const delimiter = sheetUrl.includes('?') ? '&' : '?';
-      const encoded = encodeURIComponent(JSON.stringify(payload));
-      const getRes = await fetch(`${sheetUrl}${delimiter}action=${action}&data=${encoded}`, {
-        headers: { 'Accept': 'application/json' },
+    let postSuccess = false;
+    try {
+      const res = await fetch(sheetUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(15000)
       });
-      return { success: getRes.ok };
+      if (res.ok) {
+        postSuccess = true;
+        // Jika batch_add belum didukung script spreadsheet lama pengguna, fallback kirim berurutan
+        if (action === 'batch_add' && Array.isArray(data) && data.length > 0) {
+          try {
+            const textRes = await res.text();
+            if (textRes.includes('Aksi tidak dikenal') || textRes.includes('unknown action')) {
+              for (const item of data) {
+                await fetch(sheetUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'add', transaction: item, userId, username }),
+                  signal: AbortSignal.timeout(10000)
+                }).catch(() => {});
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch (postErr: any) {
+      console.warn(`[PushToGoogleSheet] POST error for ${action}:`, postErr.message);
     }
 
-    // Jika batch_add belum didukung script spreadsheet lama pengguna, fallback kirim berurutan
-    if (action === 'batch_add' && Array.isArray(data) && data.length > 0) {
+    if (!postSuccess) {
+      // Fallback via GET query jika POST terhambat redirect CORS atau jaringan di Apps Script
       try {
-        const textRes = await res.text();
-        if (textRes.includes('Aksi tidak dikenal') || textRes.includes('unknown action')) {
-          for (const item of data) {
-            await fetch(sheetUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'add', transaction: item, userId, username }),
-              signal: AbortSignal.timeout(10000)
-            }).catch(() => {});
-          }
+        const delimiter = sheetUrl.includes('?') ? '&' : '?';
+        const encoded = encodeURIComponent(JSON.stringify(payload));
+        const getRes = await fetch(`${sheetUrl}${delimiter}action=${action}&data=${encoded}`, {
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(15000)
+        });
+        if (getRes.ok) {
+          return { success: true };
         }
-      } catch {}
+      } catch (getErr: any) {
+        console.warn(`[PushToGoogleSheet] GET fallback error for ${action}:`, getErr.message);
+      }
+      return { success: false, message: 'Gagal mengirim mutasi ke Google Apps Script' };
     }
 
     return { success: true };
@@ -1241,10 +1255,11 @@ app.post('/api/transactions', async (req, res) => {
     if (action === 'clear') {
       clearUserTransactions(userId);
       userSyncCache.delete(userId);
+      userLastClearedAt.set(userId, Date.now());
 
       // 1. Bersihkan Google Spreadsheet kembali ke 0 (menghapus seluruh baris data)
       if (sheetUrl) {
-        pushTransactionToGoogleSheet(sheetUrl, null, 'clear', userId, userCfg?.username).catch(err => {
+        await pushTransactionToGoogleSheet(sheetUrl, null, 'clear', userId, userCfg?.username).catch(err => {
           console.warn('[Clear] Forwarding clear to Google Sheet notice:', err.message);
         });
       }
@@ -1761,42 +1776,39 @@ async function handleIncomingTelegramUpdate(
           username: resolvedUsername
         };
 
+        // Ambil rekap saldo sebelum penambahan secara realtime dari Google Spreadsheet & Server
+        const priorTxs = await syncAndGetUserTransactions(draft.userId, true);
+        let priorIncome = 0;
+        let priorExpense = 0;
+        priorTxs.forEach((t: any) => {
+          const amt = Number(t.amount) || 0;
+          if (t.type === 'pemasukan') priorIncome += amt;
+          else priorExpense += amt;
+        });
+
         // Simpan transaksi ke database server lokal
         saveUserTransaction(draft.userId, newTx);
         userSyncCache.delete(draft.userId);
 
-        // Teruskan ke Google Spreadsheet secara realtime jika URL tersedia
+        // Teruskan ke Google Spreadsheet secara realtime dengan fallback tangguh
         let sheetSaved = false;
         const sysCfg = readSystemConfig();
         const effectiveSheetUrl = (userCfg.googleSheetUrl || sysCfg.globalGoogleSheetUrl || '').trim();
-        if (effectiveSheetUrl && effectiveSheetUrl.startsWith('http')) {
-          try {
-            const gasRes = await fetch(effectiveSheetUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'add',
-                transaction: newTx,
-                userId: draft.userId,
-                username: newTx.username
-              }),
-              signal: AbortSignal.timeout(6500)
-            });
-            if (gasRes.ok) sheetSaved = true;
-          } catch (gasErr: any) {
-            console.warn('[Telegram] Direct receipt sync to Google Sheet error:', gasErr.message);
-          }
+        if (effectiveSheetUrl && effectiveSheetUrl.startsWith('http') && !effectiveSheetUrl.includes('AKfycby') && !effectiveSheetUrl.includes('AKfycbwPLC')) {
+          const pushRes = await pushTransactionToGoogleSheet(
+            effectiveSheetUrl,
+            newTx,
+            'add',
+            draft.userId,
+            newTx.username
+          );
+          if (pushRes.success) sheetSaved = true;
         }
 
-        // Ambil rekap total saldo terkini secara realtime
-        const updatedTxs = await syncAndGetUserTransactions(draft.userId, true);
-        let totalIncome = 0;
-        let totalExpense = 0;
-        updatedTxs.forEach((t: any) => {
-          const amt = Number(t.amount) || 0;
-          if (t.type === 'pemasukan') totalIncome += amt;
-          else totalExpense += amt;
-        });
+        // Hitung total mutakhir yang 100% akurat dari spreadsheet & transaksi baru
+        const isDraftIncome = draft.type === 'pemasukan';
+        const totalIncome = priorIncome + (isDraftIncome ? draft.amount : 0);
+        const totalExpense = priorExpense + (!isDraftIncome ? draft.amount : 0);
         const newBalance = totalIncome - totalExpense;
 
         // Buat pesan bukti rekap kas tersimpan
@@ -2405,12 +2417,13 @@ async function handleIncomingTelegramUpdate(
       await sendChatAction('typing');
       clearUserTransactions(targetUserId);
       userSyncCache.delete(targetUserId);
+      userLastClearedAt.set(targetUserId, Date.now());
 
-      // Teruskan pembersihan bersih ke Google Spreadsheet
+      // Teruskan pembersihan bersih ke Google Spreadsheet secara realtime
       const sysCfg = readSystemConfig();
       const effectiveSheetUrl = (userCfg.googleSheetUrl || sysCfg.globalGoogleSheetUrl || '').trim();
       if (effectiveSheetUrl && effectiveSheetUrl.startsWith('http') && !effectiveSheetUrl.includes('AKfycby') && !effectiveSheetUrl.includes('AKfycbwPLC')) {
-        pushTransactionToGoogleSheet(effectiveSheetUrl, null, 'clear', targetUserId, userCfg?.username).catch(() => {});
+        await pushTransactionToGoogleSheet(effectiveSheetUrl, null, 'clear', targetUserId, userCfg?.username);
       }
 
       const resetMsg = `🗑️ <b>Seluruh data transaksi telah dikosongkan!</b>\n` +
@@ -2523,11 +2536,21 @@ async function handleIncomingTelegramUpdate(
       username: resolvedUsername
     };
 
-    // 2. Simpan ke database internal server & hapus cache
-    saveUserTransaction(targetUserId, newTx);
-    userSyncCache.set(targetUserId, Date.now());
+    // 2. Ambil data mutakhir yang sah dari Google Spreadsheet & Website sebelum menambah transaksi
+    const priorTxs = await syncAndGetUserTransactions(targetUserId, true);
+    let priorIncome = 0;
+    let priorExpense = 0;
+    priorTxs.forEach((t: any) => {
+      const amt = Number(t.amount) || 0;
+      if (t.type === 'pemasukan') priorIncome += amt;
+      else priorExpense += amt;
+    });
 
-    // 3. Simpan langsung ke Google Spreadsheet secara realtime (tanpa delay/caching)
+    // 3. Simpan transaksi ke database internal server & hapus cache
+    saveUserTransaction(targetUserId, newTx);
+    userSyncCache.delete(targetUserId);
+
+    // 4. Simpan langsung ke Google Spreadsheet secara realtime dengan fallback tangguh
     const sysCfg = readSystemConfig();
     let effectiveSheetUrl = (userCfg?.googleSheetUrl || sysCfg.globalGoogleSheetUrl || '').trim();
     if (effectiveSheetUrl.includes('AKfycby') || effectiveSheetUrl.includes('AKfycbwPLC')) {
@@ -2536,42 +2559,25 @@ async function handleIncomingTelegramUpdate(
     let sheetSynced = false;
 
     if (effectiveSheetUrl && effectiveSheetUrl.startsWith('http')) {
-      try {
-        const gasRes = await fetch(effectiveSheetUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'add',
-            transaction: newTx,
-            userId: targetUserId,
-            username: newTx.username
-          }),
-          signal: AbortSignal.timeout(15000)
-        });
-        if (gasRes.ok) {
-          const resJson: any = await gasRes.json().catch(() => null);
-          if (resJson && resJson.success !== false) {
-            sheetSynced = true;
-          }
-        }
-      } catch (gasErr: any) {
-        console.warn(`[Telegram] Real-time Google Sheet sync note:`, gasErr.message);
+      const pushRes = await pushTransactionToGoogleSheet(
+        effectiveSheetUrl,
+        newTx,
+        'add',
+        targetUserId,
+        newTx.username
+      );
+      if (pushRes.success) {
+        sheetSynced = true;
       }
     }
 
-    // 4. Tarik saldo mutakhir secara realtime DARI SPREADSHEET & WEBSITE (forceSync: true, NO CACHE)
-    const currentTxs = await syncAndGetUserTransactions(targetUserId, true);
-    let totalIncome = 0;
-    let totalExpense = 0;
-    currentTxs.forEach((t: any) => {
-      const amt = Number(t.amount) || 0;
-      if (t.type === 'pemasukan') totalIncome += amt;
-      else totalExpense += amt;
-    });
+    // 5. Hitung total saldo kas mutakhir secara presisi dari spreadsheet & mutasi baru
+    const isIncome = parsed.type === 'pemasukan';
+    const totalIncome = priorIncome + (isIncome ? parsed.amount : 0);
+    const totalExpense = priorExpense + (!isIncome ? parsed.amount : 0);
     const newBalance = totalIncome - totalExpense;
 
-    // 5. Kirim konfirmasi ke Telegram
-    const isIncome = parsed.type === 'pemasukan';
+    // 6. Kirim konfirmasi ke Telegram
     const amountFormatted = (isIncome ? '+ ' : '- ') + formatRupiah(parsed.amount);
     const typeLabel = isIncome ? '🟢 Pemasukan' : '🔴 Pengeluaran';
     let syncNote = '';

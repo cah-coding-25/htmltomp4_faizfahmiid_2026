@@ -1,0 +1,30 @@
+{
+  "usr_faiz_02": {
+    "googleSheetUrl": "",
+    "telegramBotToken": "",
+    "telegramChatId": "",
+    "useCloudStorage": false,
+    "updatedAt": "2026-09-10T23:33:08.063Z"
+  },
+  "usr_admin_01": {
+    "googleSheetUrl": "",
+    "telegramBotToken": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
+    "telegramChatId": "847926189",
+    "useCloudStorage": false,
+    "updatedAt": "2026-09-10T23:32:43.964Z"
+  },
+  "usr_1789629718761_kmz2": {
+    "googleSheetUrl": "https://script.google.com/macros/s/AKfycbwxBMwwTBx06HDrnyNH7oPtXe9y0dA0I_QMFa739S80FixHUCd-Ikb8SeVf8EFj_Ax9/exec",
+    "telegramBotToken": "8896893885:AAF09hw-3RTEvS7YXCUno_VsiSsXRoqC7Yw",
+    "telegramChatId": "7900068001",
+    "useCloudStorage": true,
+    "updatedAt": "2026-09-21T12:09:40.501Z"
+  },
+  "usr_1789858761976_4ybl": {
+    "googleSheetUrl": "https://script.google.com/macros/s/AKfycbwxBMwwTBx06HDrnyNH7oPtXe9y0dA0I_QMFa739S80FixHUCd-Ikb8SeVf8EFj_Ax9/exec",
+    "telegramBotToken": "8896893885:AAF09hw-3RTEvS7YXCUno_VsiSsXRoqC7Yw",
+    "telegramChatId": "7900068001",
+    "useCloudStorage": true,
+    "updatedAt": "2026-09-21T12:09:40.501Z"
+  }
+}

@@ -1999,11 +1999,11 @@ export default function SettingsPanel({
               <button
                 type="button"
                 onClick={() => setConfirmClearOpen(true)}
-                disabled={isClearing || (transactionCount === 0)}
+                disabled={isClearing}
                 className="flex items-center space-x-1.5 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-sm shadow-rose-600/20 transition disabled:opacity-50"
               >
                 <Trash2 className="w-4 h-4" />
-                <span>{isClearing ? 'Sedang Membersihkan...' : 'Kosongkan Semua Transaksi'}</span>
+                <span>{isClearing ? 'Sedang Mereset ke Rp 0...' : 'Kosongkan Semua Transaksi (Reset ke Rp 0)'}</span>
               </button>
 
               {clearSuccessToast && (
