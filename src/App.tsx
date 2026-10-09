@@ -983,10 +983,19 @@ export default function App() {
     amount: number;
     description: string;
     category: string;
+    date?: string;
   }) => {
+    let txDate = new Date().toISOString();
+    if (tx.date) {
+      const parsedD = new Date(tx.date);
+      if (!isNaN(parsedD.getTime())) {
+        txDate = parsedD.toISOString();
+      }
+    }
+
     const newTransaction: Transaction = {
       id: `tx_${Date.now()}`,
-      date: new Date().toISOString(),
+      date: txDate,
       type: tx.type,
       amount: tx.amount,
       description: tx.description,

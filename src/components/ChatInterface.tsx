@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Send, Bot, User, HelpCircle, CheckCircle, ArrowDownRight, 
-  ArrowUpRight, Coins, Trash2, Camera, Loader2, X, Image, RefreshCw
+  ArrowUpRight, Coins, Trash2, Camera, Loader2, X, Image, RefreshCw,
+  Maximize2, Calendar, FileText, Tag, AlertTriangle, Sparkles, Check
 } from 'lucide-react';
 import Tesseract from 'tesseract.js';
 import { Message, Transaction } from '../types';
@@ -20,8 +21,22 @@ interface ChatInterfaceProps {
     amount: number;
     description: string;
     category: string;
+    date?: string;
   }) => void;
   onGeneratePDFReport?: (period: 'all' | 'week' | 'month' | 'year') => void;
+}
+
+export interface OcrReviewState {
+  amount: number;
+  description: string;
+  category: string;
+  type: 'pemasukan' | 'pengeluaran';
+  date: string;
+  storeName?: string;
+  items?: string[];
+  imagePreviewUrl?: string;
+  source?: string;
+  isPartialOrManual?: boolean;
 }
 
 // Helper to render bold text from ** markdown markup safely without displaying raw asterisks
@@ -56,12 +71,11 @@ export default function ChatInterface({
   // OCR state
   const [isScanning, setIsScanning] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
-  const [ocrResult, setOcrResult] = useState<{
-    amount: number;
-    description: string;
-    category: string;
-    type: 'pemasukan' | 'pengeluaran';
-  } | null>(null);
+  const [ocrResult, setOcrResult] = useState<OcrReviewState | null>(null);
+  const [previewZoomImage, setPreviewZoomImage] = useState<string | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [showItemList, setShowItemList] = useState(false);
+  const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null);
 
   // In-app Camera states
   const [showSourceOptions, setShowSourceOptions] = useState(false);
@@ -136,7 +150,8 @@ export default function ChatInterface({
       }
     } catch (err) {
       console.error("Gagal memulai kamera:", err);
-      alert("Tidak dapat mengakses kamera. Pastikan Anda mengizinkan akses kamera di peramban atau silakan gunakan foto dari galeri.");
+      setFormErrorMessage("Tidak dapat mengakses kamera. Pastikan Anda mengizinkan akses kamera di peramban atau silakan pilih foto dari galeri/file.");
+      setTimeout(() => setFormErrorMessage(null), 5000);
       setIsCameraOpen(false);
     }
   };
@@ -184,10 +199,32 @@ export default function ChatInterface({
     }
   };
 
+  // Global paste listener for pasting receipt screenshots directly
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            processImageFile(file);
+            break;
+          }
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, []);
+
   const processImageFile = async (file: File) => {
     setIsScanning(true);
-    setOcrProgress(10);
+    setOcrProgress(15);
     setOcrResult(null);
+
+    const localPreviewUrl = URL.createObjectURL(file);
 
     try {
       // 1. Coba terlebih dahulu via Server AI Vision (/api/scan-receipt)
@@ -200,7 +237,7 @@ export default function ChatInterface({
           reader.readAsDataURL(file);
         });
 
-        setOcrProgress(35);
+        setOcrProgress(40);
         const apiRes = await fetch('/api/scan-receipt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -212,68 +249,106 @@ export default function ChatInterface({
 
         if (apiRes.ok) {
           const json = await apiRes.json();
-          if (json.success && json.amount > 0) {
+          if (json) {
             parsedFromApi = json;
             setOcrProgress(100);
           }
         }
       } catch (apiErr) {
-        console.warn('Server OCR scan failed, falling back to browser OCR:', apiErr);
+        console.warn('Server OCR scan notice, evaluating client fallback:', apiErr);
       }
 
       if (parsedFromApi) {
+        const hasValidAmount = Boolean(parsedFromApi.amount && parsedFromApi.amount > 0);
         setOcrResult({
-          amount: parsedFromApi.amount,
-          description: parsedFromApi.description,
-          category: parsedFromApi.category,
-          type: parsedFromApi.type || 'pengeluaran'
+          amount: parsedFromApi.amount || 0,
+          description: parsedFromApi.description || parsedFromApi.storeName || 'Nota Belanja',
+          category: parsedFromApi.category || 'Belanja & Pribadi',
+          type: parsedFromApi.type || 'pengeluaran',
+          date: parsedFromApi.date || new Date().toISOString().slice(0, 10),
+          storeName: parsedFromApi.storeName,
+          items: parsedFromApi.items,
+          imagePreviewUrl: localPreviewUrl,
+          isPartialOrManual: !hasValidAmount,
+          source: parsedFromApi.source || 'local_ocr'
         });
         return;
       }
 
       // 2. Fallback ke OCR Client Tesseract.js
-      setOcrProgress(40);
-      const result = await Tesseract.recognize(
-        file,
-        'eng', // English is universally pre-installed & blazing fast for numerals
-        {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              setOcrProgress(40 + Math.round(m.progress * 60));
+      setOcrProgress(50);
+      try {
+        const result = await Tesseract.recognize(
+          file,
+          'eng',
+          {
+            logger: m => {
+              if (m.status === 'recognizing text') {
+                setOcrProgress(50 + Math.round(m.progress * 45));
+              }
             }
           }
+        );
+
+        const text = result.data.text;
+        const parsed = parseReceiptText(text);
+
+        let mappedCategory = 'Lain-lain';
+        if (parsed.category === 'Makanan') {
+          mappedCategory = 'Makanan & Minuman';
+        } else if (parsed.category === 'Belanja') {
+          mappedCategory = 'Belanja & Pribadi';
+        } else if (parsed.category === 'Tagihan') {
+          mappedCategory = 'Tagihan & Utilitas';
+        } else if (parsed.category === 'Hiburan') {
+          mappedCategory = 'Hiburan & Liburan';
+        } else if (
+          ['Transportasi', 'Kesehatan', 'Lain-lain'].includes(parsed.category)
+        ) {
+          mappedCategory = parsed.category;
         }
-      );
 
-      const text = result.data.text;
-      const parsed = parseReceiptText(text);
-
-      // Map to standard application category names
-      let mappedCategory = 'Lain-lain';
-      if (parsed.category === 'Makanan') {
-        mappedCategory = 'Makanan & Minuman';
-      } else if (parsed.category === 'Belanja') {
-        mappedCategory = 'Belanja & Pribadi';
-      } else if (parsed.category === 'Tagihan') {
-        mappedCategory = 'Tagihan & Utilitas';
-      } else if (parsed.category === 'Hiburan') {
-        mappedCategory = 'Hiburan & Liburan';
-      } else if (
-        ['Transportasi', 'Kesehatan', 'Lain-lain'].includes(parsed.category)
-      ) {
-        mappedCategory = parsed.category;
+        const hasClientAmount = Boolean(parsed.amount && parsed.amount > 0);
+        setOcrResult({
+          amount: parsed.amount || 0,
+          description: parsed.description || 'Nota Belanja',
+          category: mappedCategory,
+          type: 'pengeluaran',
+          date: new Date().toISOString().slice(0, 10),
+          storeName: parsed.storeName,
+          items: parsed.items,
+          imagePreviewUrl: localPreviewUrl,
+          isPartialOrManual: !hasClientAmount,
+          source: 'local_client'
+        });
+      } catch (clientOcrErr) {
+        console.warn('Client OCR failed, opening manual review form with photo preview:', clientOcrErr);
+        // Tetap buka form edit pratinjau agar user bisa lihat foto dan masukkan nominal manual
+        setOcrResult({
+          amount: 0,
+          description: 'Nota Belanja',
+          category: 'Belanja & Pribadi',
+          type: 'pengeluaran',
+          date: new Date().toISOString().slice(0, 10),
+          imagePreviewUrl: localPreviewUrl,
+          isPartialOrManual: true,
+          source: 'manual'
+        });
       }
 
+    } catch (err: any) {
+      console.error("OCR process error:", err);
+      // Jangan pernah alert kaku dan menghapus foto! Buka review card dengan foto yang sudah diunggah
       setOcrResult({
-        amount: parsed.amount,
-        description: parsed.description,
-        category: mappedCategory,
-        type: 'pengeluaran'
+        amount: 0,
+        description: 'Nota Belanja',
+        category: 'Belanja & Pribadi',
+        type: 'pengeluaran',
+        date: new Date().toISOString().slice(0, 10),
+        imagePreviewUrl: localPreviewUrl,
+        isPartialOrManual: true,
+        source: 'manual'
       });
-
-    } catch (err) {
-      console.error("OCR error:", err);
-      alert("Gagal membaca struk. Pastikan kualitas foto struk jelas dan terang.");
     } finally {
       setIsScanning(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -288,17 +363,62 @@ export default function ChatInterface({
 
   const handleSaveOcrResult = () => {
     if (!ocrResult || !onAddTransactionDirect) return;
+    if (!ocrResult.amount || ocrResult.amount <= 0) {
+      setFormErrorMessage("Silakan masukkan nominal pengeluaran/pemasukan yang valid (lebih dari Rp 0) sebelum menyimpan.");
+      return;
+    }
+
     onAddTransactionDirect({
       type: ocrResult.type,
       amount: ocrResult.amount,
-      description: ocrResult.description,
+      description: ocrResult.description.trim() || 'Nota Belanja',
       category: ocrResult.category,
+      date: ocrResult.date
     });
+    setFormErrorMessage(null);
     setOcrResult(null);
   };
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      await processImageFile(file);
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
+    <div 
+      className="flex flex-col h-full bg-slate-50 dark:bg-slate-900 relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Visual Drag and Drop Overlay for receipt images */}
+      {isDraggingFile && (
+        <div className="absolute inset-0 z-50 bg-emerald-600/90 backdrop-blur-xs flex flex-col items-center justify-center text-white p-6 border-4 border-dashed border-white m-3 rounded-3xl animate-in fade-in duration-200">
+          <Camera className="w-16 h-16 mb-3 animate-bounce text-amber-300" />
+          <h3 className="text-xl font-black tracking-tight">Lepaskan Foto Struk di Sini</h3>
+          <p className="text-xs opacity-90 mt-1 max-w-xs text-center font-medium">
+            AI Vision & OCR akan otomatis membaca nominal, nama merchant/toko, dan rincian transaksi Anda!
+          </p>
+        </div>
+      )}
+
       {/* Premium Sub-Header to Clear Chat when history exists */}
       {messages.length > 0 && onClearChat && (
         <div className="px-5 py-2.5 bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-900/50 flex justify-between items-center text-xs text-slate-400 dark:text-slate-500 shrink-0">
@@ -592,7 +712,7 @@ export default function ChatInterface({
         </div>
       </div>
 
-      {/* OCR Result Confirmation Card (Review Sheet) */}
+      {/* OCR Result Confirmation Card (Review & Edit Sheet) */}
       {ocrResult && (
         <div className="mx-4 my-3 p-4 bg-white dark:bg-slate-950 border border-amber-500/30 rounded-2xl shadow-xl space-y-4 text-slate-800 dark:text-white animate-in slide-in-from-bottom duration-300 shrink-0">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-900 pb-2">
@@ -601,8 +721,12 @@ export default function ChatInterface({
                 <Camera className="w-4 h-4" />
               </div>
               <div>
-                <span className="font-bold text-xs tracking-wide uppercase text-slate-900 dark:text-amber-400 block leading-none">Pratinjau Hasil Scan Struk</span>
-                <span className="text-[9px] text-slate-400 dark:text-slate-500 mt-1 block">Silakan periksa & edit data sebelum disimpan</span>
+                <span className="font-bold text-xs tracking-wide uppercase text-slate-900 dark:text-amber-400 block leading-none">
+                  Pratinjau & Edit Hasil Scan Struk
+                </span>
+                <span className="text-[9px] text-slate-400 dark:text-slate-500 mt-1 block">
+                  Periksa foto & edit seluruh rincian transaksi sebelum disimpan
+                </span>
               </div>
             </div>
             <button 
@@ -614,73 +738,215 @@ export default function ChatInterface({
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3.5 text-xs">
-            <div className="col-span-2">
-              <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">Keterangan / Nama Toko</label>
-              <input 
-                type="text" 
-                value={ocrResult.description}
-                onChange={(e) => setOcrResult({ ...ocrResult, description: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 dark:text-white font-medium"
-              />
+          {/* Status Indicator Banner */}
+          {ocrResult.isPartialOrManual ? (
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500 mt-0.5" />
+              <div className="text-[11px] leading-relaxed">
+                <strong className="font-bold">Nominal Perlu Diisi Manual:</strong> Foto struk berhasil diunggah. Silakan lihat foto struk dan ketik nominal total pada kolom di bawah.
+              </div>
             </div>
-
-            <div>
-              <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">Nominal (Rp)</label>
-              <input 
-                type="number" 
-                value={ocrResult.amount}
-                onChange={(e) => setOcrResult({ ...ocrResult, amount: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 dark:text-white font-mono font-bold"
-              />
+          ) : (
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <Sparkles className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>
+                  <strong>Struk Berhasil Terbaca Otomatis</strong> (Mesin OCR 100% Bebas Biaya - Rp 0). Anda dapat mengedit semua data jika diperlukan.
+                </span>
+              </div>
             </div>
+          )}
 
-            <div>
-              <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">Kategori</label>
-              <select
-                value={ocrResult.category}
-                onChange={(e) => setOcrResult({ ...ocrResult, category: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 dark:text-white font-medium"
-              >
-                {ocrResult.type === 'pengeluaran' ? (
-                  EXPENSE_CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)
-                ) : (
-                  INCOME_CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)
+          {/* Form + Receipt Photo Layout */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Foto Struk Thumbnail with Zoom Trigger */}
+            {ocrResult.imagePreviewUrl && (
+              <div className="sm:w-32 shrink-0 flex flex-col items-center">
+                <div 
+                  onClick={() => setPreviewZoomImage(ocrResult.imagePreviewUrl || null)}
+                  className="relative group w-full h-32 sm:h-36 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 cursor-pointer shadow-xs hover:border-amber-500/50 transition"
+                  title="Klik untuk memperbesar foto struk"
+                >
+                  <img 
+                    src={ocrResult.imagePreviewUrl} 
+                    alt="Foto Struk" 
+                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[10px] font-bold gap-1">
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span>Perbesar</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewZoomImage(ocrResult.imagePreviewUrl || null)}
+                  className="mt-1 text-[10px] text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 font-semibold"
+                >
+                  <Maximize2 className="w-2.5 h-2.5" />
+                  <span>Lihat Foto Penuh</span>
+                </button>
+              </div>
+            )}
+
+            {/* Input Form Fields */}
+            <div className="flex-1 grid grid-cols-2 gap-3 text-xs">
+              <div className="col-span-2 sm:col-span-1">
+                <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">
+                  Keterangan / Nama Toko
+                </label>
+                <input 
+                  type="text" 
+                  value={ocrResult.description}
+                  onChange={(e) => setOcrResult({ ...ocrResult, description: e.target.value })}
+                  placeholder="Contoh: Nota Indomaret / Makan Siang"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 dark:text-white font-medium"
+                />
+              </div>
+
+              <div className="col-span-2 sm:col-span-1">
+                <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">
+                  Tanggal Transaksi
+                </label>
+                <input 
+                  type="date" 
+                  value={ocrResult.date || new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setOcrResult({ ...ocrResult, date: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 dark:text-white font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">
+                  Nominal (Rp)
+                </label>
+                <input 
+                  type="number" 
+                  min="0"
+                  step="100"
+                  value={ocrResult.amount || ''}
+                  onChange={(e) => setOcrResult({ ...ocrResult, amount: parseFloat(e.target.value) || 0 })}
+                  placeholder="0"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800 dark:text-white font-mono font-bold text-sm"
+                />
+                {ocrResult.amount > 0 && (
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block mt-0.5">
+                    {formatRupiah(ocrResult.amount)}
+                  </span>
                 )}
-              </select>
-            </div>
+              </div>
 
-            <div>
-              <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">Jenis Transaksi</label>
-              <select
-                value={ocrResult.type}
-                onChange={(e) => {
-                  const newType = e.target.value as 'pemasukan' | 'pengeluaran';
-                  const defaultCat = newType === 'pemasukan' ? 'Gaji & Pendapatan Tetap' : 'Makanan & Minuman';
-                  setOcrResult({ ...ocrResult, type: newType, category: defaultCat });
-                }}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 dark:text-white font-semibold"
-              >
-                <option value="pengeluaran">Pengeluaran (Uang Keluar)</option>
-                <option value="pemasukan">Pemasukan (Uang Masuk)</option>
-              </select>
-            </div>
+              <div>
+                <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">
+                  Kategori
+                </label>
+                <select
+                  value={ocrResult.category}
+                  onChange={(e) => setOcrResult({ ...ocrResult, category: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 dark:text-white font-medium"
+                >
+                  {ocrResult.type === 'pengeluaran' ? (
+                    EXPENSE_CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)
+                  ) : (
+                    INCOME_CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)
+                  )}
+                </select>
+              </div>
 
-            <div className="col-span-2 pt-2 flex items-center justify-end space-x-2.5 border-t border-slate-100 dark:border-slate-900">
-              <button
-                type="button"
-                onClick={() => setOcrResult(null)}
-                className="px-4 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 transition"
+              <div className="col-span-2">
+                <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">
+                  Jenis Transaksi
+                </label>
+                <select
+                  value={ocrResult.type}
+                  onChange={(e) => {
+                    const newType = e.target.value as 'pemasukan' | 'pengeluaran';
+                    const defaultCat = newType === 'pemasukan' ? 'Gaji & Pendapatan Tetap' : 'Makanan & Minuman';
+                    setOcrResult({ ...ocrResult, type: newType, category: defaultCat });
+                  }}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 dark:text-white font-semibold"
+                >
+                  <option value="pengeluaran">Pengeluaran (Uang Keluar)</option>
+                  <option value="pemasukan">Pemasukan (Uang Masuk)</option>
+                </select>
+              </div>
+
+              {/* Collapsible Detected Items List */}
+              {ocrResult.items && ocrResult.items.length > 0 && (
+                <div className="col-span-2 bg-slate-50 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
+                  <button
+                    type="button"
+                    onClick={() => setShowItemList(!showItemList)}
+                    className="flex items-center justify-between w-full text-[11px] font-semibold text-slate-600 dark:text-slate-400 hover:text-amber-500 transition"
+                  >
+                    <span>🧾 Rincian Item Terdeteksi ({ocrResult.items.length} item)</span>
+                    <span className="text-[10px]">{showItemList ? 'Tutup ▲' : 'Buka ▼'}</span>
+                  </button>
+                  {showItemList && (
+                    <ul className="mt-2 space-y-1 text-[10.5px] text-slate-600 dark:text-slate-300 font-mono pl-2 border-l-2 border-amber-500/40 max-h-32 overflow-y-auto">
+                      {ocrResult.items.map((it, idx) => (
+                        <li key={idx}>• {it}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {/* Validation Warning Alert */}
+              {formErrorMessage && (
+                <div className="col-span-2 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2 animate-in fade-in duration-200">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
+                  <span className="text-[11px] font-medium">{formErrorMessage}</span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="col-span-2 pt-2 flex items-center justify-end space-x-2.5 border-t border-slate-100 dark:border-slate-900">
+                <button
+                  type="button"
+                  onClick={() => setOcrResult(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveOcrResult}
+                  className="px-5 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-slate-950 transition-all shadow-md hover:shadow-amber-500/20 active:scale-95 flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Simpan ke Catatan</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Zoom Modal for Receipt Photo */}
+      {previewZoomImage && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setPreviewZoomImage(null)}
+        >
+          <div 
+            className="relative max-w-2xl max-h-[85vh] bg-slate-900 rounded-2xl overflow-hidden p-2 border border-slate-700 shadow-2xl flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between w-full px-3 py-2 border-b border-slate-800 text-white text-xs font-bold">
+              <span>Foto Struk Belanja (Ukuran Penuh)</span>
+              <button 
+                onClick={() => setPreviewZoomImage(null)}
+                className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white"
               >
-                Batal
+                ✕
               </button>
-              <button
-                type="button"
-                onClick={handleSaveOcrResult}
-                className="px-5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-slate-950 transition-all shadow-md hover:shadow-amber-500/20 active:scale-95"
-              >
-                Simpan ke Catatan
-              </button>
+            </div>
+            <div className="overflow-auto max-h-[75vh] w-full p-2 flex items-center justify-center">
+              <img 
+                src={previewZoomImage} 
+                alt="Foto Struk Penuh" 
+                className="max-w-full max-h-[70vh] object-contain rounded-lg"
+              />
             </div>
           </div>
         </div>

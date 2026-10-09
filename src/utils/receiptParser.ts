@@ -5,6 +5,7 @@ export interface ParsedReceipt {
   description: string;
   category: string;
   rawText: string;
+  date?: string;
   items?: string[];
   storeName?: string;
   tax?: number;
@@ -303,7 +304,28 @@ export function parseReceiptText(text: string): ParsedReceipt {
     detectedCategory = category;
   }
 
-  // 5. Ekstraksi Item Terdeteksi
+  // 5. Ekstraksi Tanggal Transaksi jika tertera di baris struk
+  let detectedDate = '';
+  for (const line of lines) {
+    const dMatch = line.match(/\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})\b/);
+    if (dMatch) {
+      let day = parseInt(dMatch[1], 10);
+      let month = parseInt(dMatch[2], 10);
+      let year = parseInt(dMatch[3], 10);
+      if (year < 100) year += 2000;
+      if (day > 12 && month <= 12) {
+        // Standard DD/MM/YYYY
+      } else if (day <= 12 && month > 12) {
+        const tmp = day; day = month; month = tmp;
+      }
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 2020 && year <= 2035) {
+        detectedDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        break;
+      }
+    }
+  }
+
+  // 6. Ekstraksi Item Terdeteksi
   const detectedItems: string[] = [];
   lines.forEach(l => {
     const cl = cleanLineForKeywords(l);
@@ -324,6 +346,7 @@ export function parseReceiptText(text: string): ParsedReceipt {
     amount: detectedAmount || 0,
     description: detectedDescription,
     category: detectedCategory,
+    date: detectedDate || undefined,
     rawText: text,
     items: detectedItems.slice(0, 10),
     storeName: detectedStoreName,

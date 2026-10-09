@@ -21,6 +21,7 @@ export interface ReceiptAnalysisResult {
   description: string;
   category: string;
   type: 'pengeluaran' | 'pemasukan';
+  date?: string;
   storeName?: string;
   items?: string[];
   rawText?: string;
@@ -254,10 +255,10 @@ export async function testOcrSpaceApiKey(_apiKey?: string): Promise<{
 }
 
 /**
- * Menganalisis gambar struk/nota belanja secara 100% OFFLINE LOKAL:
- * - Menggunakan worker Tesseract.js singleton berkecepatan tinggi
- * - Mengaplikasikan Parser Heuristik Finansial Indonesia (Subtotal, Pajak, Diskon, Tunai, Kembalian, Toko, Barang)
- * - 0 API Key, 0 Rupiah, Tanpa Batas Kuota
+ * Menganalisis gambar struk/nota belanja secara 100% OFFLINE LOKAL (GRATIS SELAMANYA - Rp 0):
+ * - Tanpa API Key berbayar apapun (0 Rupiah, tanpa Gemini berbayar, tanpa kuota limit)
+ * - Worker Tesseract.js Singleton lokal in-memory berkecepatan tinggi
+ * - Dilengkapi Heuristik Kasir Finansial Indonesia (Toko, Tanggal, Subtotal, Pajak, Diskon, Tunai, Kembalian, Item)
  */
 export async function analyzeReceiptImage(
   imageBuffer: Buffer,
@@ -267,20 +268,25 @@ export async function analyzeReceiptImage(
   const startTime = Date.now();
 
   try {
-    // 1. Eksekusi OCR dengan worker lokal in-memory
     const worker = await getOcrWorker();
-    const ocrPromise = worker.recognize(imageBuffer);
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Waktu pemindaian OCR lokal timeout (10 detik)')), 10000)
-    );
+    let recognizedText = '';
 
-    const ocrResult: any = await Promise.race([ocrPromise, timeoutPromise]);
-    const recognizedText = (ocrResult?.data?.text || '').trim();
+    try {
+      const ocrPromise = worker.recognize(imageBuffer);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Waktu pemindaian OCR lokal timeout (12 detik)')), 12000)
+      );
+
+      const ocrResult: any = await Promise.race([ocrPromise, timeoutPromise]);
+      recognizedText = (ocrResult?.data?.text || '').trim();
+    } catch (readErr: any) {
+      console.warn('[ReceiptService] Notice pemindaian buffer lokal:', readErr.message);
+    }
+
     const latencyMs = Date.now() - startTime;
+    console.log(`[ReceiptService] Local Offline OCR completed in ${latencyMs} ms. Characters read: ${recognizedText.length}`);
 
-    console.log(`[ReceiptService] Local OCR completed in ${latencyMs} ms. Characters read: ${recognizedText.length}`);
-
-    // 2. Ekstraksi data keuangan cerdas Indonesia
+    // Ekstraksi data keuangan cerdas Indonesia
     if (recognizedText) {
       const parsedReceipt = parseReceiptText(recognizedText);
 
@@ -318,6 +324,7 @@ export async function analyzeReceiptImage(
           description: desc,
           category: mappedCategory,
           type: 'pengeluaran',
+          date: parsedReceipt.date,
           storeName: parsedReceipt.storeName,
           items: parsedReceipt.items,
           subtotal: parsedReceipt.subtotal,
@@ -328,10 +335,27 @@ export async function analyzeReceiptImage(
           source: 'local_ocr',
           latencyMs
         };
+      } else {
+        // Teks terbaca tapi nominal belum pasti: kembalikan partial agar pengguna bisa langsung edit
+        recordOcrUsage(latencyMs, false);
+        return {
+          success: false,
+          amount: 0,
+          description: desc,
+          category: mappedCategory,
+          type: 'pengeluaran',
+          date: parsedReceipt.date,
+          storeName: parsedReceipt.storeName,
+          items: parsedReceipt.items,
+          rawText: recognizedText,
+          source: 'local_ocr',
+          latencyMs,
+          message: 'Teks struk terbaca, silakan periksa dan masukkan nominal yang sesuai.'
+        };
       }
     }
 
-    // 3. Fallback jika angka pada foto tidak terbaca namun ada caption (contoh: "total 45rb")
+    // Fallback jika ada caption teks
     if (userCaption && userCaption.trim()) {
       const parsedCaption = parseTransactionText(userCaption);
       if (parsedCaption.success && parsedCaption.amount > 0) {
@@ -359,7 +383,7 @@ export async function analyzeReceiptImage(
       source: 'fallback',
       rawText: recognizedText,
       latencyMs,
-      message: 'Foto struk belum berhasil terbaca dengan jelas. Pastikan foto terang, tegak, dan angka Total terlihat jelas.'
+      message: 'Foto struk belum berhasil terbaca dengan jelas. Pastikan foto terang dan angka terlihat, lalu isi manual.'
     };
 
   } catch (err: any) {

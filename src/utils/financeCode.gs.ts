@@ -103,6 +103,27 @@ function registerTelegramWebhookWithToken(token, webAppUrl) {
     var cleanUrl = webAppUrl.trim();
     var targetWebhookUrl = cleanUrl + (cleanUrl.indexOf('?') !== -1 ? '&' : '?') + 'token=' + encodeURIComponent(cleanToken);
 
+    // 1. Pemutusan Cerdas: Putuskan & cabut webhook pada bot terdahulu jika ada token lama
+    var oldToken = PropertiesService.getScriptProperties().getProperty('TELEGRAM_BOT_TOKEN') || getConfigValue('TELEGRAM_BOT_TOKEN') || TELEGRAM_BOT_TOKEN;
+    if (oldToken && oldToken.trim() !== cleanToken) {
+      try {
+        UrlFetchApp.fetch("https://api.telegram.org/bot" + oldToken.trim() + "/deleteWebhook?drop_pending_updates=true", { muteHttpExceptions: true });
+      } catch (oldErr) {}
+    }
+
+    // 2. Bersihkan antrean pending updates pada token baru
+    try {
+      UrlFetchApp.fetch("https://api.telegram.org/bot" + cleanToken + "/deleteWebhook?drop_pending_updates=true", { muteHttpExceptions: true });
+    } catch (cleanErr) {}
+
+    // 3. Verifikasi token bot via getMe
+    var meRes = UrlFetchApp.fetch("https://api.telegram.org/bot" + cleanToken + "/getMe", { muteHttpExceptions: true });
+    var meData = JSON.parse(meRes.getContentText());
+    if (!meData.ok) {
+      return { success: false, message: "Token ditolak oleh Telegram: " + (meData.description || "Token tidak valid") };
+    }
+
+    // 4. Pasang Webhook baru dengan drop_pending_updates: true
     var res = UrlFetchApp.fetch("https://api.telegram.org/bot" + cleanToken + "/setWebhook", {
       method: "post",
       contentType: "application/json",
@@ -119,7 +140,20 @@ function registerTelegramWebhookWithToken(token, webAppUrl) {
       PropertiesService.getScriptProperties().setProperty('TELEGRAM_BOT_TOKEN', cleanToken);
       setConfigValue('TELEGRAM_BOT_TOKEN', cleanToken);
       setConfigValue('WEBHOOK_URL', targetWebhookUrl);
-      return { success: true, message: data.description || "Webhook berhasil dipasang." };
+
+      // Kirim pesan sambutan jika Chat ID sudah tersedia
+      var currentChatId = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT_ID') || getConfigValue('TELEGRAM_CHAT_ID') || DEFAULT_CHAT_ID;
+      if (currentChatId) {
+        try {
+          var welcomeNotice = "⚡ <b>Koneksi Bot Telegram Baru Aktif 24 Jam!</b>\\n" +
+                              "───────────────────────────\\n" +
+                              "🤖 <b>Bot:</b> @" + (meData.result ? meData.result.username : 'bot') + "\\n" +
+                              "✅ <i>Seluruh koneksi bot lama telah diputus secara bersih. Bot ini sekarang aktif 24 jam nonstop untuk Google Spreadsheet Anda!</i>";
+          sendTelegramMessage(currentChatId, welcomeNotice, cleanToken);
+        } catch (wErr) {}
+      }
+
+      return { success: true, message: data.description || "Webhook 24 jam berhasil dipasang & koneksi bot lama telah diputus." };
     } else {
       return { success: false, message: data.description || "Ditolak oleh Telegram API." };
     }
@@ -555,6 +589,7 @@ function handleTxAction(payload) {
 function handleTelegramWebhook(update, rawEvent) {
   try {
     update = update || {};
+    var webhookStartTime = new Date().getTime();
 
     // 1. Anti-Spam: Deduplikasi update_id
     var updateId = update.update_id;
@@ -890,6 +925,10 @@ function handleTelegramWebhook(update, rawEvent) {
     // ========================================================================
     var parsedTx = parseFinanceText(rawUserText);
     if (parsedTx && parsedTx.amount > 0) {
+      // 0. Kirim status loading tanda bot memproses transaksi & menerbitkan struk realtime
+      sendTelegramChatAction(chatId, "typing", token);
+      var loadingMsgId = sendTelegramMessage(chatId, "⏳ <b>Mencatat Transaksi...</b>\\n🧾 <i>Memverifikasi format &amp; menyiapkan struk realtime...</i>", token);
+
       var txSheet = getOrCreateTxSheet();
       var newTxId = 'tg_' + new Date().getTime();
       var nowIso = new Date().toISOString();
@@ -918,29 +957,52 @@ function handleTelegramWebhook(update, rawEvent) {
         noticeDef = "\\n⚠️ <i>Total pengeluaran melebihi pemasukan (Defisit).</i>";
       }
 
-      var recordReply = "📋 <b>Ringkasan Pencatatan:</b>\\n" +
-                        "📝 <b>Keterangan:</b> " + escapeHtml(parsedTx.description) + "\\n" +
-                        "📂 <b>Kategori:</b> " + escapeHtml(parsedTx.category) + "\\n" +
-                        "🏷️ <b>Jenis:</b> " + typeBadge + "\\n" +
-                        "💵 <b>Nominal:</b> <b>" + signSymbol + "Rp " + formatRupiahJs(parsedTx.amount) + "</b>\\n" +
+      var elapsedMs = Math.max(1, new Date().getTime() - webhookStartTime);
+      var elapsedSec = (elapsedMs / 1000).toFixed(2);
+      var exactSecondWib = Utilities.formatDate(new Date(), "Asia/Jakarta", "dd/MM/yyyy HH:mm:ss 'WIB'");
+
+      var recordReply = "🧾 ═══════════════════════\\n" +
+                        "     <b>STRUK BUKTI TRANSAKSI RESMI</b>\\n" +
+                        "═══════════════════════════\\n" +
+                        "🟢 <b>STATUS : BERHASIL TERCATAT</b>\\n" +
+                        "⚡ <b>Respon :</b> " + elapsedSec + " detik (" + elapsedMs + " ms) • Realtime\\n" +
+                        "📅 <b>Waktu  :</b> " + exactSecondWib + "\\n" +
+                        "🆔 <b>Struk  :</b> <code>#" + newTxId + "</code>\\n" +
                         "───────────────────────────\\n" +
-                        "📊 <b>Rekap Saldo Kas:</b>\\n" +
-                        "📥 <b>Total Pemasukan:</b> Rp " + formatRupiahJs(postSummary.totalIncome) + "\\n" +
-                        "📤 <b>Total Pengeluaran:</b> Rp " + formatRupiahJs(postSummary.totalExpense) + "\\n" +
-                        "💰 <b>Sisa Saldo Kas (Uang Riil):</b> <b>Rp " + formatRupiahJs(postSummary.balance) + "</b>" + noticeDef + "\\n" +
+                        "🏪 <b>Keterangan :</b> <b>" + escapeHtml(parsedTx.description) + "</b>\\n" +
+                        "📂 <b>Kategori   :</b> " + escapeHtml(parsedTx.category) + "\\n" +
+                        "🏷️ <b>Jenis      :</b> " + typeBadge + "\\n" +
+                        "💵 <b>Nominal    :</b> <b>" + signSymbol + "Rp " + formatRupiahJs(parsedTx.amount) + "</b>\\n" +
                         "───────────────────────────\\n" +
-                        "✅ <i>Tersimpan otomatis di Google Spreadsheet & Website FahKeu!</i>";
+                        "📊 <b>REKAP SALDO KAS MUTAKHIR:</b>\\n" +
+                        "📥 Pemasukan   : Rp " + formatRupiahJs(postSummary.totalIncome) + "\\n" +
+                        "📤 Pengeluaran : Rp " + formatRupiahJs(postSummary.totalExpense) + "\\n" +
+                        "💰 <b>Sisa Kas : Rp " + formatRupiahJs(postSummary.balance) + "</b>" + noticeDef + "\\n" +
+                        "───────────────────────────\\n" +
+                        "✅ <i>Tersimpan otomatis di Google Spreadsheet &amp; Website FahKeu!</i>\\n" +
+                        "═══════════════════════════\\n" +
+                        "💡 <i>Ketik <b>/hapus</b> jika ingin membatalkan transaksi ini.</i>";
 
       var actionKeyboard = {
         inline_keyboard: [
           [
             { text: "💰 Cek Saldo", callback_data: "cmd_saldo" },
-            { text: "🗑️ Batalkan", callback_data: "cmd_hapus" }
+            { text: "📊 Rekap Kas", callback_data: "cmd_rekap" }
+          ],
+          [
+            { text: "🗑️ Batalkan Transaksi", callback_data: "cmd_hapus" }
           ]
         ]
       };
 
-      sendTelegramMessageWithMarkup(chatId, recordReply, actionKeyboard, token);
+      if (loadingMsgId) {
+        var edited = editTelegramMessage(chatId, loadingMsgId, recordReply, actionKeyboard, token);
+        if (!edited) {
+          sendTelegramMessageWithMarkup(chatId, recordReply, actionKeyboard, token);
+        }
+      } else {
+        sendTelegramMessageWithMarkup(chatId, recordReply, actionKeyboard, token);
+      }
       return jsonResponse({ success: true, recorded: parsedTx });
     } else {
       // Bantuan santai jika format belum terbaca
@@ -1683,7 +1745,7 @@ function sendTelegramChatAction(chatId, action, customToken) {
 
 function sendTelegramMessage(chatId, text, customToken) {
   var token = customToken || getEffectiveBotToken();
-  if (!token || !chatId) return;
+  if (!token || !chatId) return null;
   var url = "https://api.telegram.org/bot" + token + "/sendMessage";
   try {
     var res = UrlFetchApp.fetch(url, {
@@ -1692,15 +1754,20 @@ function sendTelegramMessage(chatId, text, customToken) {
       payload: JSON.stringify({ chat_id: chatId, text: text, parse_mode: "HTML" }),
       muteHttpExceptions: true
     });
+    var d = JSON.parse(res.getContentText());
+    if (d.ok && d.result) return d.result.message_id;
     if (res.getResponseCode() !== 200) {
-      UrlFetchApp.fetch(url, {
+      var fbRes = UrlFetchApp.fetch(url, {
         method: "post",
         contentType: "application/json",
         payload: JSON.stringify({ chat_id: chatId, text: text.replace(/<[^>]*>/g, '') }),
         muteHttpExceptions: true
       });
+      var fbd = JSON.parse(fbRes.getContentText());
+      if (fbd.ok && fbd.result) return fbd.result.message_id;
     }
   } catch (e) {}
+  return null;
 }
 
 function sendTelegramMessageWithMarkup(chatId, text, replyMarkup, customToken) {
@@ -1728,22 +1795,38 @@ function sendTelegramMessageWithMarkup(chatId, text, replyMarkup, customToken) {
 
 function editTelegramMessage(chatId, messageId, text, replyMarkup, customToken) {
   var token = customToken || getEffectiveBotToken();
-  if (!token || !chatId || !messageId) return;
+  if (!token || !chatId || !messageId) return false;
   var url = "https://api.telegram.org/bot" + token + "/editMessageText";
   try {
-    UrlFetchApp.fetch(url, {
+    var payloadObj = {
+      chat_id: chatId,
+      message_id: messageId,
+      text: text,
+      parse_mode: "HTML"
+    };
+    if (replyMarkup) payloadObj.reply_markup = replyMarkup;
+    var res = UrlFetchApp.fetch(url, {
       method: "post",
       contentType: "application/json",
-      payload: JSON.stringify({
-        chat_id: chatId,
-        message_id: messageId,
-        text: text,
-        parse_mode: "HTML",
-        reply_markup: replyMarkup
-      }),
+      payload: JSON.stringify(payloadObj),
       muteHttpExceptions: true
     });
+    var d = JSON.parse(res.getContentText());
+    if (d.ok) return true;
+    if (res.getResponseCode() !== 200) {
+      delete payloadObj.parse_mode;
+      payloadObj.text = text.replace(/<[^>]*>/g, '');
+      var fbRes = UrlFetchApp.fetch(url, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify(payloadObj),
+        muteHttpExceptions: true
+      });
+      var fbd = JSON.parse(fbRes.getContentText());
+      return Boolean(fbd.ok);
+    }
   } catch (e) {}
+  return false;
 }
 
 function answerTelegramCallback(cbId, textAlert, customToken) {

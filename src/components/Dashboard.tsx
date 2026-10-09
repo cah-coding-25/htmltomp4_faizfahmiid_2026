@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -27,11 +27,17 @@ import {
   X,
   Check,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Camera,
+  Loader2,
+  Sparkles,
+  Maximize2,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Transaction } from '../types';
 import { formatRupiah } from '../utils/parser';
 import { generatePDFReport } from '../utils/pdfGenerator';
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../utils/categories';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -128,6 +134,126 @@ export default function Dashboard({
   const [modalType, setModalType] = useState<'pemasukan' | 'pengeluaran'>('pengeluaran');
   const [modalCategory, setModalCategory] = useState('Makanan');
   const [modalSource, setModalSource] = useState<'web' | 'telegram'>('web');
+
+  // OCR Receipt Scan Modal State di Dashboard
+  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+  const [isScanningReceipt, setIsScanningReceipt] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanPreviewUrl, setScanPreviewUrl] = useState<string | null>(null);
+  const [scannedData, setScannedData] = useState<{
+    amount: number;
+    description: string;
+    category: string;
+    type: 'pemasukan' | 'pengeluaran';
+    date: string;
+    storeName?: string;
+    items?: string[];
+    isPartial?: boolean;
+    source?: string;
+  } | null>(null);
+  const [scanZoomImage, setScanZoomImage] = useState<string | null>(null);
+  const [isDraggingDashboard, setIsDraggingDashboard] = useState(false);
+  const scanFileInputRef = useRef<HTMLInputElement>(null);
+
+  const processDashboardReceiptFile = async (file: File) => {
+    setIsScanningReceipt(true);
+    setScanProgress(20);
+    const localUrl = URL.createObjectURL(file);
+    setScanPreviewUrl(localUrl);
+
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      setScanProgress(55);
+      const res = await fetch('/api/scan-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: base64,
+          mimeType: file.type || 'image/jpeg'
+        })
+      });
+
+      setScanProgress(90);
+      let parsed: any = null;
+      if (res.ok) {
+        parsed = await res.json();
+      }
+
+      setScanProgress(100);
+      if (parsed) {
+        const hasAmt = Boolean(parsed.amount && parsed.amount > 0);
+        setScannedData({
+          amount: parsed.amount || 0,
+          description: parsed.description || parsed.storeName || 'Nota Belanja',
+          category: parsed.category || 'Belanja & Pribadi',
+          type: parsed.type || 'pengeluaran',
+          date: parsed.date || new Date().toISOString().slice(0, 10),
+          storeName: parsed.storeName,
+          items: parsed.items,
+          isPartial: !hasAmt,
+          source: parsed.source
+        });
+      } else {
+        setScannedData({
+          amount: 0,
+          description: 'Nota Belanja',
+          category: 'Belanja & Pribadi',
+          type: 'pengeluaran',
+          date: new Date().toISOString().slice(0, 10),
+          isPartial: true
+        });
+      }
+    } catch (e) {
+      console.warn('Dashboard scan notice:', e);
+      setScannedData({
+        amount: 0,
+        description: 'Nota Belanja',
+        category: 'Belanja & Pribadi',
+        type: 'pengeluaran',
+        date: new Date().toISOString().slice(0, 10),
+        isPartial: true
+      });
+    } finally {
+      setIsScanningReceipt(false);
+      if (scanFileInputRef.current) scanFileInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveScannedReceipt = () => {
+    if (!scannedData || !onAddTransaction) return;
+    if (!scannedData.amount || scannedData.amount <= 0) {
+      alert("Silakan masukkan nominal pengeluaran/pemasukan yang valid (lebih dari Rp 0).");
+      return;
+    }
+
+    let txDate = new Date().toISOString();
+    if (scannedData.date) {
+      const parsedD = new Date(scannedData.date);
+      if (!isNaN(parsedD.getTime())) {
+        txDate = parsedD.toISOString();
+      }
+    }
+
+    onAddTransaction({
+      id: `tx_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      date: txDate,
+      type: scannedData.type,
+      amount: scannedData.amount,
+      description: scannedData.description.trim() || 'Nota Belanja',
+      category: scannedData.category,
+      source: 'web'
+    });
+
+    setIsScanModalOpen(false);
+    setScannedData(null);
+    setScanPreviewUrl(null);
+  };
 
   const openAddModal = () => {
     setEditingId(null);
@@ -643,13 +769,24 @@ export default function Dashboard({
             </h3>
 
             {onAddTransaction && (
-              <button
-                onClick={openAddModal}
-                className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-sm transition"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Tambah Transaksi</span>
-              </button>
+              <>
+                <button
+                  onClick={openAddModal}
+                  className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-sm transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Transaksi</span>
+                </button>
+
+                <button
+                  onClick={() => setIsScanModalOpen(true)}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 active:scale-95 text-slate-950 rounded-xl text-xs font-black shadow-sm transition"
+                  title="Pindai foto struk belanja dengan AI Vision / OCR"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Scan Struk</span>
+                </button>
+              </>
             )}
 
             {transactions.length > 0 && onClearTransactions && (
@@ -1017,6 +1154,20 @@ export default function Dashboard({
             </div>
 
             <form onSubmit={handleSaveModal} className="space-y-4">
+              {!editingId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setIsScanModalOpen(true);
+                  }}
+                  className="w-full flex items-center justify-center space-x-2 py-2 px-3 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-dashed border-amber-300 dark:border-amber-800 rounded-xl text-xs font-bold transition shadow-xs group"
+                >
+                  <Camera className="w-4 h-4 text-amber-500 group-hover:scale-110 transition" />
+                  <span>Punya Foto Struk? Scan Otomatis via AI Vision & OCR</span>
+                </button>
+              )}
+
               {/* Tipe Transaksi */}
               <div>
                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5">
@@ -1135,7 +1286,320 @@ export default function Dashboard({
           </div>
         </div>
       )}
-      {/* Modal Konfirmasi Kosongkan Seluruh Transaksi (Reset ke Rp 0) */}
+
+      {/* Modal Pindai Struk / Nota Belanja (Scan & Edit OCR) */}
+      {isScanModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200/80 dark:border-slate-800 space-y-4 my-auto">
+            {/* Header Modal */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    Scan Struk Belanja (AI Vision & OCR)
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Pindai struk fisik & edit data sebelum disimpan ke buku kas
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsScanModalOpen(false);
+                  setScannedData(null);
+                  setScanPreviewUrl(null);
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl transition hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Hidden Input File */}
+            <input 
+              type="file"
+              ref={scanFileInputRef}
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) processDashboardReceiptFile(file);
+              }}
+              className="hidden"
+            />
+
+            {/* Tahap 1: Belum ada file atau sedang scanning */}
+            {!scannedData && (
+              <div className="space-y-4 py-2">
+                {isScanningReceipt ? (
+                  <div className="p-8 text-center bg-slate-50 dark:bg-slate-950 rounded-2xl border border-amber-500/20 space-y-3">
+                    <Loader2 className="w-10 h-10 animate-spin text-amber-500 mx-auto" />
+                    <div>
+                      <h5 className="text-sm font-bold text-slate-900 dark:text-white">
+                        Sedang Menganalisis Struk...
+                      </h5>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Membaca nama toko, tanggal, item & nominal belanja
+                      </p>
+                    </div>
+                    <div className="w-full max-w-xs mx-auto bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-amber-400 to-yellow-500 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${scanProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setIsDraggingDashboard(true); }}
+                    onDragLeave={(e) => { e.preventDefault(); setIsDraggingDashboard(false); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingDashboard(false);
+                      const f = e.dataTransfer.files?.[0];
+                      if (f && f.type.startsWith('image/')) processDashboardReceiptFile(f);
+                    }}
+                    onClick={() => scanFileInputRef.current?.click()}
+                    className={`p-8 text-center rounded-2xl border-2 border-dashed transition cursor-pointer flex flex-col items-center justify-center space-y-3 ${
+                      isDraggingDashboard 
+                        ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/20' 
+                        : 'border-slate-300 dark:border-slate-700 hover:border-amber-500 bg-slate-50/50 dark:bg-slate-950/50'
+                    }`}
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-xs">
+                      <Camera className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                        Klik atau Seret Foto Struk ke Sini
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Mendukung foto format JPG, PNG, atau WEBP dari galeri & kamera
+                      </p>
+                    </div>
+                    <div className="pt-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          scanFileInputRef.current?.click();
+                        }}
+                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs transition shadow-sm"
+                      >
+                        Pilih File Foto
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tahap 2: Hasil Scan Siap Diedit */}
+            {scannedData && (
+              <div className="space-y-4">
+                {/* Banner Status */}
+                {scannedData.isPartial ? (
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500 mt-0.5" />
+                    <div className="text-[11px] leading-relaxed">
+                      <strong className="font-bold">Nominal Perlu Diisi Manual:</strong> Foto struk terbaca. Silakan lihat foto di samping dan lengkapi nominal di formulir berikut.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span className="text-[11px]">
+                      <strong>Struk Berhasil Terdeteksi!</strong> Silakan periksa & sesuaikan data jika diperlukan sebelum disimpan.
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-4">
+                  {/* Foto Struk Thumbnail */}
+                  {scanPreviewUrl && (
+                    <div className="sm:w-36 shrink-0 flex flex-col items-center">
+                      <div 
+                        onClick={() => setScanZoomImage(scanPreviewUrl)}
+                        className="relative group w-full h-36 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 cursor-pointer shadow-xs hover:border-amber-500 transition"
+                        title="Klik untuk melihat ukuran penuh"
+                      >
+                        <img 
+                          src={scanPreviewUrl} 
+                          alt="Pratinjau Struk" 
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[10px] font-bold gap-1">
+                          <Maximize2 className="w-3.5 h-3.5" />
+                          <span>Perbesar</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => scanFileInputRef.current?.click()}
+                        className="mt-2 text-[10px] text-amber-600 dark:text-amber-400 hover:underline font-semibold"
+                      >
+                        Ganti Foto Struk
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Form Edit */}
+                  <div className="flex-1 grid grid-cols-2 gap-3 text-xs">
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">
+                        Keterangan / Toko
+                      </label>
+                      <input 
+                        type="text" 
+                        value={scannedData.description}
+                        onChange={(e) => setScannedData({ ...scannedData, description: e.target.value })}
+                        placeholder="Contoh: Nota Indomaret"
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 dark:text-white font-medium"
+                      />
+                    </div>
+
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">
+                        Tanggal Transaksi
+                      </label>
+                      <input 
+                        type="date" 
+                        value={scannedData.date}
+                        onChange={(e) => setScannedData({ ...scannedData, date: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 dark:text-white font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">
+                        Nominal (Rp)
+                      </label>
+                      <input 
+                        type="number" 
+                        min="0"
+                        step="100"
+                        value={scannedData.amount || ''}
+                        onChange={(e) => setScannedData({ ...scannedData, amount: parseFloat(e.target.value) || 0 })}
+                        placeholder="0"
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800 dark:text-white font-mono font-bold text-sm"
+                      />
+                      {scannedData.amount > 0 && (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block mt-0.5">
+                          {formatRupiah(scannedData.amount)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">
+                        Kategori
+                      </label>
+                      <select
+                        value={scannedData.category}
+                        onChange={(e) => setScannedData({ ...scannedData, category: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 dark:text-white font-medium"
+                      >
+                        {scannedData.type === 'pengeluaran' ? (
+                          EXPENSE_CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)
+                        ) : (
+                          INCOME_CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)
+                        )}
+                      </select>
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mb-1 uppercase tracking-wider">
+                        Jenis Transaksi
+                      </label>
+                      <select
+                        value={scannedData.type}
+                        onChange={(e) => {
+                          const newType = e.target.value as 'pemasukan' | 'pengeluaran';
+                          const defaultCat = newType === 'pemasukan' ? 'Gaji & Pendapatan Tetap' : 'Makanan & Minuman';
+                          setScannedData({ ...scannedData, type: newType, category: defaultCat });
+                        }}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 dark:text-white font-semibold"
+                      >
+                        <option value="pengeluaran">Pengeluaran (Uang Keluar)</option>
+                        <option value="pemasukan">Pemasukan (Uang Masuk)</option>
+                      </select>
+                    </div>
+
+                    {/* Detected items list */}
+                    {scannedData.items && scannedData.items.length > 0 && (
+                      <div className="col-span-2 bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
+                        <span className="text-[10.5px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                          🧾 Item Terdeteksi ({scannedData.items.length} item):
+                        </span>
+                        <ul className="text-[10px] font-mono text-slate-600 dark:text-slate-300 space-y-0.5 max-h-24 overflow-y-auto pl-2 border-l-2 border-amber-500/40">
+                          {scannedData.items.map((it, idx) => (
+                            <li key={idx}>• {it}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="flex items-center justify-end space-x-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScannedData(null);
+                      setScanPreviewUrl(null);
+                    }}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    Foto Ulang
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveScannedReceipt}
+                    className="flex items-center space-x-1.5 px-5 py-2.5 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 active:scale-95 text-slate-950 rounded-xl text-xs font-black shadow-md transition"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Simpan Transaksi Struk</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Zoom Modal Struk di Dashboard */}
+      {scanZoomImage && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setScanZoomImage(null)}
+        >
+          <div 
+            className="relative max-w-2xl max-h-[85vh] bg-slate-900 rounded-2xl overflow-hidden p-2 border border-slate-700 shadow-2xl flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between w-full px-3 py-2 border-b border-slate-800 text-white text-xs font-bold">
+              <span>Foto Struk Belanja</span>
+              <button 
+                onClick={() => setScanZoomImage(null)}
+                className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-auto max-h-[75vh] w-full p-2 flex items-center justify-center">
+              <img 
+                src={scanZoomImage} 
+                alt="Foto Struk Penuh" 
+                className="max-w-full max-h-[70vh] object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
       {confirmClear && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200/80 dark:border-slate-800 space-y-4">

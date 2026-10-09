@@ -15,6 +15,13 @@ import {
   testOcrSpaceApiKey
 } from './src/utils/receiptService';
 
+process.on('uncaughtException', (err: any) => {
+  console.warn('[Server] Uncaught exception safely handled:', err?.message || err);
+});
+process.on('unhandledRejection', (reason: any) => {
+  console.warn('[Server] Unhandled rejection safely handled:', reason?.message || reason);
+});
+
 const app = express();
 const PORT = 3000;
 
@@ -265,7 +272,7 @@ function writeSystemConfig(updates: Partial<SystemConfig>): SystemConfig {
 }
 
 // Persistensi Pengaturan Privat Masing-masing User (Google Sheet URL & Bot Telegram)
-function readAllUserSettings(): Record<string, UserSettingsRecord> {
+function readAllUserSettings(): Record<string, any> {
   if (!fs.existsSync(USER_SETTINGS_FILE)) {
     return {};
   }
@@ -1025,6 +1032,17 @@ app.post('/api/user-settings/:userId', async (req, res) => {
       return res.status(400).json({ success: false, message: 'User ID wajib disertakan.' });
     }
     const { googleSheetUrl, telegramBotToken, telegramChatId, useCloudStorage, explicitClearSheet } = req.body || {};
+
+    const allExistingSettings = readAllUserSettings();
+    const oldUserConfig = allExistingSettings[userId] || {};
+    const oldBotToken = cleanTelegramToken(oldUserConfig.telegramBotToken || '');
+    const cleanToken = cleanTelegramToken(telegramBotToken !== undefined ? telegramBotToken : oldBotToken);
+
+    // Pemutusan Cerdas: Jika bot token baru dimasukkan/berubah, putuskan total koneksi bot lama!
+    if (cleanToken && oldBotToken && cleanToken !== oldBotToken) {
+      await severAndDisconnectOldTelegramBots(cleanToken, oldBotToken, userId);
+    }
+
     const updated = writeUserSettings(userId, {
       googleSheetUrl,
       telegramBotToken,
@@ -1056,9 +1074,9 @@ app.post('/api/user-settings/:userId', async (req, res) => {
     });
 
     // Otomatis aktifkan / hentikan background poller sesuai ketersediaan token Telegram
-    const cleanToken = cleanTelegramToken(updated.telegramBotToken || '');
-    if (cleanToken && cleanToken.includes(':')) {
-      telegramPoller.startPoller(userId, cleanToken, updated.googleSheetUrl).then((pRes) => {
+    const finalCleanToken = cleanTelegramToken(updated.telegramBotToken || cleanToken || '');
+    if (finalCleanToken && finalCleanToken.includes(':')) {
+      telegramPoller.startPoller(userId, finalCleanToken, updated.googleSheetUrl).then((pRes) => {
         if (pRes.success) {
           console.log(`[UserSettings] Telegram poller active for user ${userId} (@${pRes.bot?.username})`);
         } else {
@@ -1067,7 +1085,7 @@ app.post('/api/user-settings/:userId', async (req, res) => {
       }).catch(err => {
         console.warn(`[UserSettings] Poller start error for ${userId}:`, err.message);
       });
-    } else if (!cleanToken) {
+    } else if (!finalCleanToken) {
       telegramPoller.stopPoller(userId);
     }
 
@@ -1341,6 +1359,14 @@ interface TelegramDraftReceipt {
 const activeDraftReceipts = new Map<string, TelegramDraftReceipt>();
 const userPendingDraftReceipt = new Map<string, string>(); // chatId -> draftId
 
+// Model sesi edit interaktif untuk transaksi tersimpan via bot Telegram
+interface TelegramPendingTxEdit {
+  txId: string;
+  userId: string;
+  field: 'amount' | 'description';
+}
+const userPendingTxEdit = new Map<string, TelegramPendingTxEdit>(); // chatId -> TelegramPendingTxEdit
+
 // Parser nominal fleksibel untuk pesan balasan pengguna (dukung 180k, 185rb, 181.475, 1.5jt, dll)
 function parseSimpleAmount(input: string): number | null {
   if (!input) return null;
@@ -1414,7 +1440,7 @@ function formatReceiptSavedMessage(
     balanceNotice +
     `───────────────────────────\n` +
     `${syncNote}\n\n` +
-    `💡 <i>Ketik <b>/hapus</b> jika ingin membatalkan transaksi ini.</i>`;
+    `💡 <i>Ketik <b>/hapus</b> untuk membatalkan atau <b>/edit</b> untuk mengedit transaksi ini.</i>`;
 }
 
 // Format pesan pratinjau struk identik dengan UI Website
@@ -1438,26 +1464,33 @@ function formatReceiptPreviewMessage(d: TelegramDraftReceipt): string {
     ? '🔴 Pengeluaran (Uang Keluar)' 
     : '🟢 Pemasukan (Uang Masuk)';
 
+  const amountDisplay = d.amount > 0 
+    ? `💵 <b>Nominal:</b> <b>${formatRupiah(d.amount)}</b>` 
+    : `💵 <b>Nominal:</b> ⚠️ <b>Belum terisi (Rp 0)</b> - <i>Ketik nominal di chat</i>`;
+
   return `📸 <b>PRATINJAU HASIL SCAN STRUK</b>\n` +
     `<i>Silakan periksa & edit data sebelum disimpan:</i>\n` +
     `───────────────────────────\n` +
     (d.storeName ? `🏪 <b>Toko / Merchant:</b> <b>${escapeHtml(d.storeName)}</b>\n` : '') +
     `📝 <b>Keterangan:</b> <b>${escapeHtml(d.description)}</b>\n` +
-    `💵 <b>Nominal:</b> <b>${formatRupiah(d.amount)}</b>\n` +
+    `${amountDisplay}\n` +
     `📂 <b>Kategori:</b> <b>${escapeHtml(d.category)}</b>\n` +
     `🏷️ <b>Jenis:</b> ${typeLabel}\n` +
     cashierDetails +
     itemsSnippet +
     `───────────────────────────\n` +
-    `💡 <i>Jika sudah tepat 100%, klik tombol <b>💾 Simpan ke Catatan</b> di bawah. Anda juga bisa mengedit nominal, nama toko, atau kategori dahulu jika ada yang salah.</i>`;
+    (d.amount > 0
+      ? `💡 <i>Jika sudah tepat 100%, klik tombol <b>💾 Simpan ke Catatan</b> di bawah. Anda juga bisa mengedit nominal, nama toko, atau kategori dahulu jika ada yang salah.</i>`
+      : `💡 <i>Ketik angka nominal di chat ini (contoh: <code>45k</code> atau <code>45000</code>) atau klik <b>✏️ Ubah Nominal</b> untuk mengisi total belanja.</i>`);
 }
 
 // Keyboard inline tombol pratinjau utama di Telegram
-function getReceiptPreviewKeyboard(draftId: string) {
+function getReceiptPreviewKeyboard(draftId: string, amount: number = 1) {
+  const saveText = amount > 0 ? '💾 Simpan ke Catatan' : '✏️ Isi Nominal Dahulu';
   return {
     inline_keyboard: [
       [
-        { text: '💾 Simpan ke Catatan', callback_data: `dr_save:${draftId}` }
+        { text: saveText, callback_data: `dr_save:${draftId}` }
       ],
       [
         { text: '✏️ Ubah Nominal', callback_data: `dr_edit_amt:${draftId}` },
@@ -1760,6 +1793,18 @@ async function handleIncomingTelegramUpdate(
           return { success: true, chatId, action: 'draft_not_found' };
         }
 
+        // Validasi nominal harus > 0 sebelum disimpan
+        if (!draft.amount || draft.amount <= 0) {
+          await answerCallback(cbId, '⚠️ Nominal masih Rp 0. Masukkan nominal dahulu!');
+          draft.waitingFor = 'amount';
+          userPendingDraftReceipt.set(chatId, draftId);
+          await sendReply(
+            `✏️ <b>Nominal Belum Diisi:</b>\n` +
+            `Silakan ketikkan nominal belanja di pesan chat ini (contoh: <code>45000</code> atau <code>45k</code>) sebelum menyimpan ke catatan kas.`
+          );
+          return { success: false, chatId, action: 'draft_need_amount' };
+        }
+
         // Buat objek transaksi final
         const targetUserObj = allUsers.find(u => u.id === draft.userId);
         const resolvedUsername = targetUserObj?.username || targetUserObj?.name || fromUser.username || fromUser.first_name || 'Telegram User';
@@ -1820,8 +1865,21 @@ async function handleIncomingTelegramUpdate(
           sheetSaved || Boolean(effectiveSheetUrl)
         );
 
-        // Update pesan Telegram dan HILANGKAN TOMBOL untuk mencegah klik ganda
-        await editReplyWithMarkup(message.message_id, savedMsg, { inline_keyboard: [] });
+        const savedActionKeyboard = {
+          inline_keyboard: [
+            [
+              { text: "💰 Cek Saldo", callback_data: "cmd_saldo" },
+              { text: "📊 Rekap Kas", callback_data: "cmd_rekap" }
+            ],
+            [
+              { text: "✏️ Edit Transaksi", callback_data: `tx_edit_menu:${newTx.id}` },
+              { text: "🗑️ Batalkan Transaksi", callback_data: "cmd_hapus" }
+            ]
+          ]
+        };
+
+        // Update pesan Telegram dengan menu navigasi & edit cepat
+        await editReplyWithMarkup(message.message_id, savedMsg, savedActionKeyboard);
         if (draft.previewMessageId && draft.previewMessageId !== message.message_id) {
           editReplyWithMarkup(draft.previewMessageId, 'ℹ️ <i>Struk ini telah disimpan ke catatan kas.</i>', { inline_keyboard: [] }).catch(() => {});
         }
@@ -1972,6 +2030,230 @@ async function handleIncomingTelegramUpdate(
         return { success: true, chatId, action: 'draft_back' };
       }
 
+      // 9. Tombol Cek Saldo Cepat
+      if (cbData === 'cmd_saldo') {
+        const userTxs = await syncAndGetUserTransactions(targetUserId, true);
+        let totalIncome = 0; let totalExpense = 0;
+        userTxs.forEach((t: any) => {
+          const amt = Number(t.amount) || 0;
+          if (t.type === 'pemasukan') totalIncome += amt;
+          else totalExpense += amt;
+        });
+        const balance = totalIncome - totalExpense;
+        const msg = `📊 <b>Rekap Saldo Kas Saat Ini:</b>\n` +
+          `───────────────────────────\n` +
+          `📥 <b>Total Pemasukan:</b> ${formatRupiah(totalIncome)}\n` +
+          `📤 <b>Total Pengeluaran:</b> ${formatRupiah(totalExpense)}\n` +
+          `💰 <b>Sisa Kas (Uang Riil):</b> <b>${formatRupiah(balance)}</b>\n` +
+          `📑 <b>Total Transaksi:</b> ${userTxs.length} data\n` +
+          `───────────────────────────\n` +
+          `✅ <i>Sinkron realtime dengan Google Spreadsheet & Website.</i>`;
+        await sendReply(msg);
+        await answerCallback(cbId);
+        return { success: true, chatId, action: 'cb_saldo' };
+      }
+
+      // 10. Tombol Rekap Kas Cepat
+      if (cbData === 'cmd_rekap') {
+        const userTxs = await syncAndGetUserTransactions(targetUserId, true);
+        if (userTxs.length === 0) {
+          await sendReply(`📭 <i>Belum ada transaksi tercatat.</i>`);
+          await answerCallback(cbId);
+          return { success: true, chatId, action: 'cb_rekap' };
+        }
+        const recent = userTxs.slice(0, 5);
+        const listStr = recent.map((t: any, idx: number) => {
+          const sign = t.type === 'pemasukan' ? '🟢 +' : '🔴 -';
+          return `${idx + 1}. ${sign} <b>${formatRupiah(t.amount)}</b> | ${escapeHtml(t.description || t.category)}`;
+        }).join('\n');
+        let totalIncome = 0; let totalExpense = 0;
+        userTxs.forEach((t: any) => {
+          const amt = Number(t.amount) || 0;
+          if (t.type === 'pemasukan') totalIncome += amt;
+          else totalExpense += amt;
+        });
+        const balance = totalIncome - totalExpense;
+        const msg = `📑 <b>5 Transaksi Terakhir:</b>\n` +
+          `───────────────────────────\n` +
+          `${listStr}\n` +
+          `───────────────────────────\n` +
+          `💰 <b>Sisa Saldo Kas:</b> <b>${formatRupiah(balance)}</b>\n` +
+          `💡 <i>Ketik <b>/edit</b> jika ingin mengedit transaksi terakhir.</i>`;
+        await sendReply(msg);
+        await answerCallback(cbId);
+        return { success: true, chatId, action: 'cb_rekap' };
+      }
+
+      // 11. Tombol Batalkan / Hapus Transaksi Terakhir Cepat
+      if (cbData === 'cmd_hapus') {
+        const userTxs = await syncAndGetUserTransactions(targetUserId, true);
+        if (userTxs.length === 0) {
+          await answerCallback(cbId, 'Tidak ada transaksi yang dapat dibatalkan.');
+          return { success: true, chatId, action: 'cb_delete_none' };
+        }
+        const lastTx = userTxs[0];
+        deleteUserTransaction(targetUserId, lastTx.id);
+        userSyncCache.delete(targetUserId);
+
+        const sysCfg = readSystemConfig();
+        const effectiveSheetUrl = (userCfg.googleSheetUrl || sysCfg.globalGoogleSheetUrl || '').trim();
+        if (effectiveSheetUrl && effectiveSheetUrl.startsWith('http')) {
+          pushTransactionToGoogleSheet(effectiveSheetUrl, lastTx.id, 'delete', targetUserId, userCfg?.username).catch(() => {});
+        }
+
+        const newTxs = await syncAndGetUserTransactions(targetUserId, true);
+        let totalIncome = 0; let totalExpense = 0;
+        newTxs.forEach((t: any) => {
+          const amt = Number(t.amount) || 0;
+          if (t.type === 'pemasukan') totalIncome += amt;
+          else totalExpense += amt;
+        });
+        const newBal = totalIncome - totalExpense;
+
+        const cancelMsg = `🗑️ <b>Transaksi Berhasil Dibatalkan!</b>\n` +
+          `───────────────────────────\n` +
+          `Dihapus: <b>${escapeHtml(lastTx.description)}</b> (${formatRupiah(lastTx.amount)})\n` +
+          `💰 <b>Sisa Saldo Kas Sekarang:</b> <b>${formatRupiah(newBal)}</b>\n` +
+          `───────────────────────────\n` +
+          `✅ <i>Sinkron realtime di Website & Google Spreadsheet.</i>`;
+        await sendReply(cancelMsg);
+        await answerCallback(cbId, 'Transaksi berhasil dibatalkan!');
+        return { success: true, chatId, action: 'cb_deleted' };
+      }
+
+      // 12. Menu Edit Transaksi Interaktif
+      if (cbData.startsWith('tx_edit_menu:')) {
+        const txId = cbData.replace('tx_edit_menu:', '');
+        const userTxs = await syncAndGetUserTransactions(targetUserId, true);
+        const targetTx = userTxs.find((t: any) => t.id === txId) || userTxs[0];
+        if (!targetTx) {
+          await answerCallback(cbId, 'Transaksi tidak ditemukan.');
+          return { success: false, chatId, action: 'tx_not_found' };
+        }
+        const sign = targetTx.type === 'pemasukan' ? '🟢 +' : '🔴 -';
+        const editMenuMsg = `📝 <b>Menu Edit Transaksi:</b>\n` +
+          `───────────────────────────\n` +
+          `• ${sign} <b>${formatRupiah(targetTx.amount)}</b> | ${escapeHtml(targetTx.description)}\n` +
+          `📂 Kategori: <b>${escapeHtml(targetTx.category)}</b>\n` +
+          `───────────────────────────\n` +
+          `Pilih data yang ingin Anda ubah:`;
+        const editKb = {
+          inline_keyboard: [
+            [
+              { text: '✏️ Ubah Nominal', callback_data: `tx_edit_amt:${targetTx.id}` },
+              { text: '✏️ Ubah Keterangan', callback_data: `tx_edit_desc:${targetTx.id}` }
+            ],
+            [
+              { text: '🏷️ Ganti Kategori', callback_data: `tx_edit_cat:${targetTx.id}` },
+              { text: '🗑️ Hapus Transaksi Ini', callback_data: 'cmd_hapus' }
+            ],
+            [
+              { text: '🔙 Selesai / Tutup', callback_data: `tx_edit_done:${targetTx.id}` }
+            ]
+          ]
+        };
+        await editReplyWithMarkup(message.message_id, editMenuMsg, editKb);
+        await answerCallback(cbId);
+        return { success: true, chatId, action: 'tx_edit_menu' };
+      }
+
+      // 13. Prompt Edit Nominal Transaksi
+      if (cbData.startsWith('tx_edit_amt:')) {
+        const txId = cbData.replace('tx_edit_amt:', '');
+        userPendingTxEdit.set(chatId, { txId, userId: targetUserId, field: 'amount' });
+        await sendReply(
+          `✏️ <b>Ubah Nominal Transaksi:</b>\n\n` +
+          `Ketikkan angka nominal yang baru di chat ini.\n` +
+          `Mendukung format: <code>50000</code>, <code>50k</code>, <code>50rb</code>, atau <code>1.5jt</code>:`
+        );
+        await answerCallback(cbId, 'Silakan ketik nominal baru.');
+        return { success: true, chatId, action: 'tx_prompt_amt' };
+      }
+
+      // 14. Prompt Edit Keterangan Transaksi
+      if (cbData.startsWith('tx_edit_desc:')) {
+        const txId = cbData.replace('tx_edit_desc:', '');
+        userPendingTxEdit.set(chatId, { txId, userId: targetUserId, field: 'description' });
+        await sendReply(
+          `✏️ <b>Ubah Keterangan Transaksi:</b>\n\n` +
+          `Ketikkan keterangan baru di chat ini (contoh: <code>Beli Kopi Kenangan</code>):`
+        );
+        await answerCallback(cbId, 'Silakan ketik keterangan baru.');
+        return { success: true, chatId, action: 'tx_prompt_desc' };
+      }
+
+      // 15. Menu Ganti Kategori Transaksi
+      if (cbData.startsWith('tx_edit_cat:')) {
+        const txId = cbData.replace('tx_edit_cat:', '');
+        const catKb = {
+          inline_keyboard: [
+            [
+              { text: '🍽️ Makanan & Minum', callback_data: `tx_set_cat:${txId}:Makanan & Minuman` },
+              { text: '🛒 Belanja & Pribadi', callback_data: `tx_set_cat:${txId}:Belanja & Pribadi` }
+            ],
+            [
+              { text: '🚗 Transportasi', callback_data: `tx_set_cat:${txId}:Transportasi` },
+              { text: '💡 Tagihan & Utilitas', callback_data: `tx_set_cat:${txId}:Tagihan & Utilitas` }
+            ],
+            [
+              { text: '💼 Operasional Usaha', callback_data: `tx_set_cat:${txId}:Operasional Usaha` },
+              { text: '📦 Pengeluaran Lain', callback_data: `tx_set_cat:${txId}:Pengeluaran Lain` }
+            ],
+            [
+              { text: '🔙 Kembali ke Menu Edit', callback_data: `tx_edit_menu:${txId}` }
+            ]
+          ]
+        };
+        await editReplyWithMarkup(
+          message.message_id,
+          `📂 <b>Pilih Kategori Baru untuk Transaksi:</b>`,
+          catKb
+        );
+        await answerCallback(cbId);
+        return { success: true, chatId, action: 'tx_cat_menu' };
+      }
+
+      // 16. Tetapkan Kategori Baru Transaksi
+      if (cbData.startsWith('tx_set_cat:')) {
+        const parts = cbData.split(':');
+        const txId = parts[1];
+        const newCat = parts.slice(2).join(':') || 'Belanja & Pribadi';
+        const userTxs = await syncAndGetUserTransactions(targetUserId, true);
+        const targetTx = userTxs.find((t: any) => t.id === txId);
+        if (targetTx) {
+          targetTx.category = newCat;
+          editUserTransaction(targetUserId, targetTx);
+          userSyncCache.delete(targetUserId);
+
+          const sysCfg = readSystemConfig();
+          const effectiveSheetUrl = (userCfg.googleSheetUrl || sysCfg.globalGoogleSheetUrl || '').trim();
+          if (effectiveSheetUrl && effectiveSheetUrl.startsWith('http')) {
+            pushTransactionToGoogleSheet(effectiveSheetUrl, targetTx, 'edit', targetUserId, targetTx.username).catch(() => {});
+          }
+
+          await answerCallback(cbId, `Kategori diubah: ${newCat}`);
+          await sendReply(
+            `✅ <b>Kategori transaksi berhasil diubah menjadi "${escapeHtml(newCat)}"!</b>\n` +
+            `<i>Tersimpan realtime di Website & Google Spreadsheet.</i>`
+          );
+        } else {
+          await answerCallback(cbId, 'Transaksi tidak ditemukan.');
+        }
+        return { success: true, chatId, action: 'tx_cat_set' };
+      }
+
+      // 17. Selesai Edit
+      if (cbData.startsWith('tx_edit_done:')) {
+        userPendingTxEdit.delete(chatId);
+        await editReplyWithMarkup(
+          message.message_id,
+          `✅ <i>Edit transaksi selesai. Seluruh data telah diperbarui di Website & Google Spreadsheet.</i>`,
+          { inline_keyboard: [] }
+        );
+        await answerCallback(cbId, 'Selesai.');
+        return { success: true, chatId, action: 'tx_edit_done' };
+      }
+
       await answerCallback(cbId);
       return { success: true, chatId, action: 'callback_unhandled' };
     }
@@ -2043,25 +2325,16 @@ async function handleIncomingTelegramUpdate(
         // Ekstraksi transaksi struk menggunakan Mesin OCR Offline Lokal (Cepat & Tanpa Limit)
         const analysis = await analyzeReceiptImage(imgBuffer, mediaMimeType, message.caption || message.text);
 
-        if (!analysis.success || !analysis.amount || analysis.amount <= 0) {
-          const failMsg = `⚠️ <b>Foto struk belum berhasil terbaca dengan jelas.</b>\n\n` +
-            `💡 <i>Tips foto struk:</i>\n` +
-            `• Pastikan foto terang, tegak lurus, dan angka <b>Total Belanja</b> tidak terpotong.\n` +
-            `• Anda juga dapat menyertakan nominal saat mengirim foto (caption), contoh: <code>total 45k</code>\n\n` +
-            `Atau ketik langsung di chat ini, contoh:\n` +
-            `• <code>beli bensin 25rb</code>\n` +
-            `• <code>belanja indomaret 45k</code>`;
-          if (loadingMsgId) await editReply(loadingMsgId, failMsg);
-          else await sendReply(failMsg);
-          return { success: false, chatId, action: 'ocr_unreadable' };
-        }
+        // Evaluasi hasil OCR lokal offline
+        const hasDetectedAmount = Boolean(analysis.success && analysis.amount && analysis.amount > 0);
+        const initialAmount = hasDetectedAmount ? (analysis.amount || 0) : 0;
 
         // Update progress loading: OCR berhasil 100%, menyiapkan pratinjau interaktif
         if (loadingMsgId) {
           await editReply(
             loadingMsgId,
-            `⏳ <b>Membaca Struk Belanja...</b>\n` +
-            `<code>[■■■■■■■■■■] 100%</code> Memindai selesai! Menyiapkan pratinjau...`
+            `⏳ <b>Membaca Struk Belanja (Offline OCR)...</b>\n` +
+            `<code>[■■■■■■■■■■] 100%</code> Pemindaian selesai! Menyiapkan pratinjau...`
           );
         }
 
@@ -2078,7 +2351,7 @@ async function handleIncomingTelegramUpdate(
           id: draftId,
           chatId,
           userId: targetUserId,
-          amount: analysis.amount,
+          amount: initialAmount,
           description: txDesc,
           category: txCat,
           type: txType,
@@ -2089,15 +2362,19 @@ async function handleIncomingTelegramUpdate(
           change: analysis.change,
           items: analysis.items,
           username: resolvedUsername,
-          waitingFor: null,
+          waitingFor: hasDetectedAmount ? null : 'amount',
           createdAt: Date.now()
         };
 
         activeDraftReceipts.set(draftId, draft);
         userPendingDraftReceipt.set(chatId, draftId);
 
-        const previewMsg = formatReceiptPreviewMessage(draft);
-        const keyboard = getReceiptPreviewKeyboard(draftId);
+        let previewMsg = formatReceiptPreviewMessage(draft);
+        if (!hasDetectedAmount) {
+          previewMsg += `\n\n👉 <b>Nominal belum terbaca otomatis:</b>\n` +
+            `Silakan langsung ketik angka total belanja di chat ini (contoh: <code>45000</code> atau <code>45k</code>) atau klik <b>✏️ Ubah Nominal</b> di bawah agar tersimpan ke catatan kas.`;
+        }
+        const keyboard = getReceiptPreviewKeyboard(draftId, initialAmount);
 
         // Tampilkan kartu pratinjau interaktif di pesan Telegram
         if (loadingMsgId) {
@@ -2188,6 +2465,88 @@ async function handleIncomingTelegramUpdate(
       }
     }
 
+    // ========================================================================
+    // PENANGANAN INPUT EDIT TRANSAKSI TERSIMPAN (NOMINAL & KETERANGAN)
+    // ========================================================================
+    const pendingTxEdit = userPendingTxEdit.get(chatId);
+    if (pendingTxEdit) {
+      const userTxs = await syncAndGetUserTransactions(pendingTxEdit.userId, true);
+      const targetTx = userTxs.find((t: any) => t.id === pendingTxEdit.txId);
+      if (!targetTx) {
+        userPendingTxEdit.delete(chatId);
+        await sendReply(`⚠️ <i>Transaksi tidak ditemukan atau sudah dihapus sebelumnya.</i>`);
+        return { success: false, chatId, action: 'tx_edit_not_found' };
+      }
+
+      if (pendingTxEdit.field === 'amount') {
+        const parsedAmt = parseSimpleAmount(text);
+        if (parsedAmt && parsedAmt > 0) {
+          targetTx.amount = parsedAmt;
+          editUserTransaction(pendingTxEdit.userId, targetTx);
+          userSyncCache.delete(pendingTxEdit.userId);
+
+          const sysCfg = readSystemConfig();
+          const effectiveSheetUrl = (userCfg.googleSheetUrl || sysCfg.globalGoogleSheetUrl || '').trim();
+          if (effectiveSheetUrl && effectiveSheetUrl.startsWith('http')) {
+            pushTransactionToGoogleSheet(effectiveSheetUrl, targetTx, 'edit', pendingTxEdit.userId, targetTx.username).catch(() => {});
+          }
+
+          userPendingTxEdit.delete(chatId);
+
+          const updatedTxs = await syncAndGetUserTransactions(pendingTxEdit.userId, true);
+          let totalInc = 0; let totalExp = 0;
+          updatedTxs.forEach((t: any) => {
+            const a = Number(t.amount) || 0;
+            if (t.type === 'pemasukan') totalInc += a;
+            else totalExp += a;
+          });
+          const newBal = totalInc - totalExp;
+
+          await sendReply(
+            `✅ <b>Nominal Transaksi Berhasil Diperbarui!</b>\n` +
+            `───────────────────────────\n` +
+            `📝 <b>Keterangan:</b> ${escapeHtml(targetTx.description)}\n` +
+            `💵 <b>Nominal Baru:</b> <b>${formatRupiah(parsedAmt)}</b>\n` +
+            `💰 <b>Sisa Kas Riil:</b> <b>${formatRupiah(newBal)}</b>\n` +
+            `───────────────────────────\n` +
+            `✅ <i>Sinkron otomatis di Website & Google Spreadsheet.</i>`
+          );
+          return { success: true, chatId, action: 'tx_amount_updated' };
+        } else {
+          await sendReply(
+            `⚠️ <i>Format nominal belum tepat. Masukkan angka nominal yang benar.\nContoh: <code>50000</code>, <code>50k</code>, atau <code>50rb</code></i>`
+          );
+          return { success: false, chatId, action: 'tx_amount_invalid' };
+        }
+      }
+
+      if (pendingTxEdit.field === 'description') {
+        if (text && text.trim().length > 0) {
+          targetTx.description = text.trim();
+          editUserTransaction(pendingTxEdit.userId, targetTx);
+          userSyncCache.delete(pendingTxEdit.userId);
+
+          const sysCfg = readSystemConfig();
+          const effectiveSheetUrl = (userCfg.googleSheetUrl || sysCfg.globalGoogleSheetUrl || '').trim();
+          if (effectiveSheetUrl && effectiveSheetUrl.startsWith('http')) {
+            pushTransactionToGoogleSheet(effectiveSheetUrl, targetTx, 'edit', pendingTxEdit.userId, targetTx.username).catch(() => {});
+          }
+
+          userPendingTxEdit.delete(chatId);
+
+          await sendReply(
+            `✅ <b>Keterangan Transaksi Berhasil Diperbarui!</b>\n` +
+            `───────────────────────────\n` +
+            `📝 <b>Keterangan Baru:</b> "${escapeHtml(targetTx.description)}"\n` +
+            `💵 <b>Nominal:</b> ${formatRupiah(targetTx.amount)}\n` +
+            `───────────────────────────\n` +
+            `✅ <i>Sinkron otomatis di Website & Google Spreadsheet.</i>`
+          );
+          return { success: true, chatId, action: 'tx_desc_updated' };
+        }
+      }
+    }
+
     const cleanLower = text.toLowerCase();
 
     // A. Perintah /start atau bantuan atau help
@@ -2225,6 +2584,7 @@ async function handleIncomingTelegramUpdate(
         `<b>📊 Perintah Pintar:</b>\n` +
         `• <b>/saldo</b> - Cek sisa saldo kas saat ini\n` +
         `• <b>/rekap</b> - Lihat 5 transaksi terakhir\n` +
+        `• <b>/edit</b> - Edit nominal atau keterangan transaksi terakhir\n` +
         `• <b>/hapus</b> - Batalkan transaksi yang baru dicatat\n` +
         `• <b>/bantuan</b> - Menampilkan panduan ini\n\n` +
         `<i>✨ Setiap transaksi langsung tercatat secara realtime di Website & Google Spreadsheet Anda!</i>`;
@@ -2437,6 +2797,44 @@ async function handleIncomingTelegramUpdate(
       return { success: true, chatId, action: 'reset_all' };
     }
 
+    // D3. Perintah Edit Transaksi Terakhir (/edit atau /ubah)
+    if (cleanLower === 'edit' || cleanLower === 'ubah' || cleanLower.startsWith('/edit') || cleanLower.startsWith('/ubah')) {
+      await sendChatAction('typing');
+      const userTxs = await syncAndGetUserTransactions(targetUserId, true);
+      if (userTxs.length === 0) {
+        await sendReply(`⚠️ <i>Belum ada transaksi yang dapat diedit. Coba catat transaksi terlebih dahulu.</i>`);
+        return { success: true, chatId, action: 'edit_none' };
+      }
+
+      const lastTx = userTxs[0];
+      const sign = lastTx.type === 'pemasukan' ? '🟢 +' : '🔴 -';
+      const editMsg = `📝 <b>Menu Edit Transaksi Terakhir:</b>\n` +
+        `───────────────────────────\n` +
+        `• ${sign} <b>${formatRupiah(lastTx.amount)}</b> | ${escapeHtml(lastTx.description)}\n` +
+        `📂 Kategori: <b>${escapeHtml(lastTx.category)}</b>\n` +
+        `───────────────────────────\n` +
+        `Pilih bagian data yang ingin Anda ubah:`;
+
+      const editKeyboard = {
+        inline_keyboard: [
+          [
+            { text: '✏️ Ubah Nominal', callback_data: `tx_edit_amt:${lastTx.id}` },
+            { text: '✏️ Ubah Keterangan', callback_data: `tx_edit_desc:${lastTx.id}` }
+          ],
+          [
+            { text: '🏷️ Ganti Kategori', callback_data: `tx_edit_cat:${lastTx.id}` },
+            { text: '🗑️ Hapus Transaksi Ini', callback_data: 'cmd_hapus' }
+          ],
+          [
+            { text: '🔙 Selesai / Tutup', callback_data: `tx_edit_done:${lastTx.id}` }
+          ]
+        ]
+      };
+
+      await sendReplyWithMarkup(editMsg, editKeyboard);
+      return { success: true, chatId, action: 'edit_prompt' };
+    }
+
     // E. Deteksi Pertanyaan Saldo Kas Santai / Variasi Cek Saldo
     const balanceKeywords = ['saldo', 'sisa saldo', 'sisa uang', 'uang saya', 'cek duit', 'duit saya', 'berapa uang', 'berapa saldo', 'kas sekarang', 'uang kas', 'saldo kas', 'total kas', 'sisa kas'];
     if (balanceKeywords.some(bk => cleanLower === bk || cleanLower.includes(bk))) {
@@ -2519,6 +2917,15 @@ async function handleIncomingTelegramUpdate(
       return { success: false, chatId, action: 'unparsed' };
     }
 
+    // 0. Mulai pengukuran stopwatch realtime & kirim feedback loading instan ke chat bot
+    const txStartTime = Date.now();
+    await sendChatAction('typing');
+
+    const loadingMsgId = await sendReply(
+      `⏳ <b>Mencatat Transaksi...</b>\n` +
+      `🧾 <i>Memverifikasi format & menyiapkan struk realtime...</i>`
+    );
+
     // 1. Buat objek transaksi baru
     const targetUserObj = allUsers.find(u => u.id === targetUserId);
     const resolvedUsername = targetUserObj?.username || targetUserObj?.name || fromUser.username || fromUser.first_name || 'Telegram User';
@@ -2577,41 +2984,79 @@ async function handleIncomingTelegramUpdate(
     const totalExpense = priorExpense + (!isIncome ? parsed.amount : 0);
     const newBalance = totalIncome - totalExpense;
 
-    // 6. Kirim konfirmasi ke Telegram
+    // 6. Hitung durasi proses per detik & format waktu presisi per detik (WIB)
+    const elapsedMs = Math.max(1, Date.now() - txStartTime);
+    const elapsedSec = (elapsedMs / 1000).toFixed(2);
+
+    const nowWib = new Date();
+    const dateWibStr = nowWib.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Jakarta' });
+    const timeWibStr = nowWib.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' });
+    const exactSecondWib = `${dateWibStr} ${timeWibStr} WIB`;
+
     const amountFormatted = (isIncome ? '+ ' : '- ') + formatRupiah(parsed.amount);
     const typeLabel = isIncome ? '🟢 Pemasukan' : '🔴 Pengeluaran';
     let syncNote = '';
     if (sheetSynced) {
-      syncNote = '✅ <b>Tersimpan realtime di Website & Google Spreadsheet!</b>';
+      syncNote = '✅ <i>Tersimpan realtime di Google Spreadsheet & Website!</i>';
     } else if (effectiveSheetUrl && effectiveSheetUrl.startsWith('http')) {
-      syncNote = '✅ <b>Tersimpan di Website & Server!</b>\n⚠️ <i>(Gagal menulis ke Spreadsheet: periksa izin deployment Web App Apps Script agar disetel ke "Anyone/Siapa saja")</i>';
+      syncNote = '✅ <i>Tersimpan di Website & Database Server!</i>\n⚠️ <i>(Gagal menulis ke Spreadsheet: periksa izin Web App disetel ke Anyone/Siapa saja)</i>';
     } else {
-      syncNote = '✅ <b>Tersimpan realtime di Website & Server!</b>\nℹ️ <i>(Spreadsheet belum disambungkan: Buka Website > Pengaturan > masukkan URL Web App Spreadsheet agar tertulis di Google Sheets)</i>';
+      syncNote = '✅ <i>Tersimpan realtime di Website & Server!</i>';
     }
 
     let balanceNotice = '';
     if (totalIncome === 0 && totalExpense > 0) {
-      balanceNotice = `\n💡 <i>Catatan: Belum ada pemasukan/saldo awal tercatat. Ketik contoh: <code>saldo awal 500rb</code> atau <code>gaji 2jt</code> agar sisa uang riil Anda terhitung positif.</i>\n`;
+      balanceNotice = `\n💡 <i>Catatan: Belum ada pemasukan/saldo awal. Ketik contoh: <code>saldo awal 500rb</code> atau <code>gaji 2jt</code> agar sisa kas riil bernilai positif.</i>`;
     } else if (newBalance < 0) {
-      balanceNotice = `\n⚠️ <i>Total pengeluaran melebihi pemasukan (Defisit ${formatRupiah(Math.abs(newBalance))}). Catat pemasukan dengan mengetik misal: <code>gaji 2jt</code></i>\n`;
+      balanceNotice = `\n⚠️ <i>Total pengeluaran melebihi pemasukan (Defisit ${formatRupiah(Math.abs(newBalance))}). Catat pemasukan dengan mengetik: <code>gaji 2jt</code></i>`;
     }
 
-    const confirmationMsg = `📋 <b>Ringkasan Pencatatan:</b>\n` +
-      `📝 <b>Keterangan:</b> ${escapeHtml(parsed.description)}\n` +
-      `📂 <b>Kategori:</b> ${escapeHtml(parsed.category)}\n` +
-      `🏷️ <b>Jenis:</b> ${typeLabel}\n` +
-      `💵 <b>Nominal:</b> <b>${amountFormatted}</b>\n` +
+    // 7. Format Struk Bukti Transaksi Resmi Lengkap
+    const receiptMsg =
+      `🧾 ═══════════════════════\n` +
+      `     <b>STRUK BUKTI TRANSAKSI RESMI</b>\n` +
+      `═══════════════════════════\n` +
+      `🟢 <b>STATUS : BERHASIL TERCATAT</b>\n` +
+      `⚡ <b>Respon :</b> ${elapsedSec} detik (${elapsedMs} ms) • Realtime\n` +
+      `📅 <b>Waktu  :</b> ${exactSecondWib}\n` +
+      `🆔 <b>Struk  :</b> <code>#${newTx.id}</code>\n` +
       `───────────────────────────\n` +
-      `📊 <b>Rekap Saldo Kas:</b>\n` +
-      `📥 <b>Total Pemasukan:</b> ${formatRupiah(totalIncome)}\n` +
-      `📤 <b>Total Pengeluaran:</b> ${formatRupiah(totalExpense)}\n` +
-      `💰 <b>Sisa Saldo Kas (Uang Riil):</b> <b>${formatRupiah(newBalance)}</b>\n` +
+      `🏪 <b>Keterangan :</b> <b>${escapeHtml(parsed.description)}</b>\n` +
+      `📂 <b>Kategori   :</b> ${escapeHtml(parsed.category)}\n` +
+      `🏷️ <b>Jenis      :</b> ${typeLabel}\n` +
+      `💵 <b>Nominal    :</b> <b>${amountFormatted}</b>\n` +
+      `───────────────────────────\n` +
+      `📊 <b>REKAP SALDO KAS MUTAKHIR:</b>\n` +
+      `📥 Pemasukan   : ${formatRupiah(totalIncome)}\n` +
+      `📤 Pengeluaran : ${formatRupiah(totalExpense)}\n` +
+      `💰 <b>Sisa Kas : ${formatRupiah(newBalance)}</b>\n` +
       balanceNotice +
       `───────────────────────────\n` +
-      `${syncNote}\n\n` +
-      `💡 <i>Ketik <b>/hapus</b> jika ingin membatalkan transaksi ini.</i>`;
+      `${syncNote}\n` +
+      `═══════════════════════════\n` +
+      `💡 <i>Ketik <b>/hapus</b> untuk membatalkan atau <b>/edit</b> untuk mengedit transaksi ini.</i>`;
 
-    await sendReply(confirmationMsg);
+    const actionKeyboard = {
+      inline_keyboard: [
+        [
+          { text: "💰 Cek Saldo", callback_data: "cmd_saldo" },
+          { text: "📊 Rekap Kas", callback_data: "cmd_rekap" }
+        ],
+        [
+          { text: "✏️ Edit Transaksi", callback_data: `tx_edit_menu:${newTx.id}` },
+          { text: "🗑️ Batalkan Transaksi", callback_data: "cmd_hapus" }
+        ]
+      ]
+    };
+
+    if (loadingMsgId) {
+      const edited = await editReplyWithMarkup(loadingMsgId, receiptMsg, actionKeyboard);
+      if (!edited) {
+        await sendReplyWithMarkup(receiptMsg, actionKeyboard);
+      }
+    } else {
+      await sendReplyWithMarkup(receiptMsg, actionKeyboard);
+    }
 
     return { success: true, chatId, action: 'recorded' };
 
@@ -2656,11 +3101,18 @@ class TelegramPollerService {
     error?: string;
   }>>();
 
-  public async startPoller(userId: string, token: string, googleSheetUrl?: string): Promise<{
+  public async startPoller(
+    userId: string,
+    token: string,
+    googleSheetUrl?: string,
+    options?: { forceResetWebhook?: boolean }
+  ): Promise<{
     success: boolean;
     bot?: any;
     detectedChatId?: string;
     error?: string;
+    mode?: 'polling' | 'webhook';
+    webhookUrl?: string;
   }> {
     const cleanToken = cleanTelegramToken(token);
     if (!cleanToken) return { success: false, error: 'Token bot tidak boleh kosong.' };
@@ -2683,7 +3135,8 @@ class TelegramPollerService {
           username: existing.botUsername,
           first_name: existing.botFirstName || existing.botUsername
         },
-        detectedChatId: existing.lastDetectedChatId
+        detectedChatId: existing.lastDetectedChatId,
+        mode: 'polling'
       };
     }
 
@@ -2700,8 +3153,8 @@ class TelegramPollerService {
         // Hentikan poller lama dan batalkan request getUpdates yang sedang gantung
         this.stopPoller(userId);
 
-        // Tunggu 800ms agar koneksi socket lama dilepas sepenuhnya oleh Telegram
-        await new Promise(r => setTimeout(r, 800));
+        // Tunggu 500ms agar koneksi socket lama dilepas sepenuhnya oleh Telegram
+        await new Promise(r => setTimeout(r, 500));
 
         // 1. Verifikasi bot via getMe
         const getMeRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getMe`, {
@@ -2713,12 +3166,43 @@ class TelegramPollerService {
         }
         const botInfo = getMeData.result;
 
-        // 2. HAPUS WEBHOOK LAMA AGAR LONG-POLLING BEBAS ERROR 409
+        // 2. Cek apakah ada Webhook aktif (misalnya ke Google Apps Script)
+        let hasActiveWebhook = false;
+        let activeWebhookUrl = '';
+        try {
+          const whCheck = await fetch(`https://api.telegram.org/bot${cleanToken}/getWebhookInfo`, {
+            signal: AbortSignal.timeout(6000)
+          });
+          const whData: any = await whCheck.json();
+          if (whData.ok && whData.result?.url) {
+            hasActiveWebhook = true;
+            activeWebhookUrl = whData.result.url;
+          }
+        } catch {}
+
+        // JIKA WEBHOOK SUDAH AKTIF DAN USER TIDAK MEMINTA FORCE RESET:
+        // Jaga webhook tetap berjalan 24 jam nonstop, JANGAN hapus webhook!
+        if (hasActiveWebhook && !options?.forceResetWebhook) {
+          console.log(`[TelegramPoller] Bot @${botInfo.username} has active Webhook (${activeWebhookUrl}). Skipping poller daemon to preserve 24/7 webhook.`);
+          return {
+            success: true,
+            bot: {
+              id: botInfo.id,
+              username: botInfo.username,
+              first_name: botInfo.first_name || botInfo.username
+            },
+            detectedChatId: existing?.lastDetectedChatId || '',
+            mode: 'webhook' as const,
+            webhookUrl: activeWebhookUrl
+          };
+        }
+
+        // Hapus webhook hanya jika tidak ada webhook aktif ATAU user secara eksplisit meminta beralih ke Mode Poller
         try {
           await fetch(`https://api.telegram.org/bot${cleanToken}/deleteWebhook?drop_pending_updates=false`, {
             signal: AbortSignal.timeout(8000)
           });
-          console.log(`[TelegramPoller] Cleared webhook & reset connection for @${botInfo.username}`);
+          console.log(`[TelegramPoller] Cleared webhook & prepared polling connection for @${botInfo.username}`);
         } catch (delErr) {
           console.warn('[TelegramPoller] deleteWebhook warning:', delErr);
         }
@@ -2763,7 +3247,16 @@ class TelegramPollerService {
         // 5. Jalankan daemon polling loop
         this.runLoop(userId, state, initialOffset);
 
-        return { success: true, bot: botInfo, detectedChatId };
+        return {
+          success: true,
+          bot: {
+            id: botInfo.id,
+            username: botInfo.username,
+            first_name: botInfo.first_name || botInfo.username
+          },
+          detectedChatId,
+          mode: 'polling' as const
+        };
       } catch (err: any) {
         return { success: false, error: err.message || 'Gagal menghubungi Telegram API' };
       } finally {
@@ -2784,6 +3277,21 @@ class TelegramPollerService {
       } catch (e) {}
       this.pollers.delete(userId);
       console.log(`[TelegramPoller] Stopped poller & aborted pending requests for user ${userId}`);
+    }
+  }
+
+  public stopPollerByToken(token: string, exceptUserId?: string) {
+    const clean = cleanTelegramToken(token);
+    if (!clean) return;
+    for (const [uId, p] of this.pollers.entries()) {
+      if (cleanTelegramToken(p.token) === clean && (!exceptUserId || uId !== exceptUserId)) {
+        p.isRunning = false;
+        try {
+          p.abortController.abort();
+        } catch (e) {}
+        this.pollers.delete(uId);
+        console.log(`[TelegramPoller] Severed poller connection for token ${clean.substring(0, 10)}... (user: ${uId})`);
+      }
     }
   }
 
@@ -2850,8 +3358,16 @@ class TelegramPollerService {
         if (!res.ok) {
           if (res.status === 409) {
             consecutive409++;
-            console.warn(`[TelegramPoller] 409 Conflict for @${state.botUsername} (#${consecutive409}). Telegram has another connection open. Resetting webhook...`);
-            await fetch(`https://api.telegram.org/bot${state.token}/deleteWebhook?drop_pending_updates=false`).catch(() => {});
+            console.warn(`[TelegramPoller] 409 Conflict for @${state.botUsername} (#${consecutive409}). Checking if webhook is active...`);
+            try {
+              const whCheck = await fetch(`https://api.telegram.org/bot${state.token}/getWebhookInfo`);
+              const whData: any = await whCheck.json();
+              if (whData.ok && whData.result?.url) {
+                console.log(`[TelegramPoller] Webhook active (${whData.result.url}) for @${state.botUsername}. Gracefully stopping poller.`);
+                state.isRunning = false;
+                break;
+              }
+            } catch {}
             const delay = Math.min(3000 * consecutive409, 12000);
             await new Promise(r => setTimeout(r, delay));
             continue;
@@ -2893,6 +3409,61 @@ class TelegramPollerService {
 
 export const telegramPoller = new TelegramPollerService();
 
+/**
+ * Pemutus Koneksi Cerdas:
+ * Ketika API token Bot Telegram baru didaftarkan atau digunakan,
+ * fungsi ini secara cerdas memutuskan seluruh koneksi bot terdahulu (lama),
+ * mencabut/menghapus webhook lama dengan drop_pending_updates: true,
+ * mematikan seluruh daemon poller yang masih menggantung,
+ * dan memastikan sistem 100% fokus eksklusif hanya pada bot baru ini.
+ */
+export async function severAndDisconnectOldTelegramBots(
+  newCleanToken: string,
+  oldToken?: string,
+  targetUserId?: string
+): Promise<{ severedOldToken: boolean; flushedNewToken: boolean }> {
+  let severedOldToken = false;
+  let flushedNewToken = false;
+
+  const cleanOld = cleanTelegramToken(oldToken || '');
+  const cleanNew = cleanTelegramToken(newCleanToken || '');
+
+  // 1. Putuskan bot lama secara menyeluruh jika berbeda dari bot baru
+  if (cleanOld && cleanOld !== cleanNew) {
+    console.log(`[TelegramSever] Intelligent severance: disconnecting old bot (${cleanOld.substring(0, 10)}...) for user ${targetUserId || 'unknown'}`);
+    telegramPoller.stopPollerByToken(cleanOld);
+    if (targetUserId) {
+      telegramPoller.stopPoller(targetUserId);
+    }
+    try {
+      await fetch(`https://api.telegram.org/bot${cleanOld}/deleteWebhook?drop_pending_updates=true`, {
+        signal: AbortSignal.timeout(6000)
+      });
+      severedOldToken = true;
+      console.log(`[TelegramSever] Successfully revoked webhook and cleared pending updates for old bot.`);
+    } catch (err: any) {
+      console.warn(`[TelegramSever] Notice revoking old bot webhook:`, err.message);
+    }
+  }
+
+  // 2. Putuskan instance poller pada user lain yang mungkin tidak sengaja memakai token baru ini
+  if (cleanNew) {
+    telegramPoller.stopPollerByToken(cleanNew, targetUserId);
+    // 3. Bersihkan antrean pending updates & webhook gantung pada token baru
+    try {
+      await fetch(`https://api.telegram.org/bot${cleanNew}/deleteWebhook?drop_pending_updates=true`, {
+        signal: AbortSignal.timeout(6000)
+      });
+      flushedNewToken = true;
+      console.log(`[TelegramSever] New bot token (${cleanNew.substring(0, 10)}...) prepped cleanly (pending updates flushed).`);
+    } catch (err: any) {
+      console.warn(`[TelegramSever] Notice prepping new bot token:`, err.message);
+    }
+  }
+
+  return { severedOldToken, flushedNewToken };
+}
+
 // ENDPOINT WEBHOOK TELEGRAM SERVER (Opsional jika webhook tetap diaktifkan)
 app.post('/api/telegram/webhook', async (req, res) => {
   res.status(200).json({ ok: true });
@@ -2926,6 +3497,9 @@ app.post('/api/telegram/auto-setup', async (req, res) => {
     const targetUserId = userId || 'usr_admin_01';
     const allSettings = readAllUserSettings();
     const existingCfg = allSettings[targetUserId] || { googleSheetUrl: '', telegramChatId: '' };
+
+    // Pemutusan Cerdas: Putuskan seluruh koneksi bot terdahulu & bersihkan antrean updates
+    await severAndDisconnectOldTelegramBots(cleanToken, (existingCfg as any)?.telegramBotToken, targetUserId);
 
     // Pertahankan URL spreadsheet yang sudah ada jika caller tidak mengirimkan yang baru
     const cleanUrl = (googleSheetUrl && googleSheetUrl.trim()) ? googleSheetUrl.trim() : (existingCfg.googleSheetUrl || '');
@@ -3052,6 +3626,9 @@ app.post('/api/telegram/setup-gas-webhook', async (req, res) => {
     const allSettings = readAllUserSettings();
     const existingCfg = allSettings[targetUserId] || { googleSheetUrl: '', telegramChatId: '' };
 
+    // Pemutusan Cerdas: Putuskan seluruh koneksi bot terdahulu & bersihkan webhook lama
+    await severAndDisconnectOldTelegramBots(cleanToken, (existingCfg as any)?.telegramBotToken, targetUserId);
+
     // 1. Verifikasi Bot via getMe
     const getMeRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getMe`, { signal: AbortSignal.timeout(8000) });
     const getMeData: any = await getMeRes.json();
@@ -3152,6 +3729,195 @@ app.post('/api/telegram/setup-gas-webhook', async (req, res) => {
   } catch (err: any) {
     console.error('[setup-gas-webhook error]:', err);
     res.status(500).json({ success: false, message: err.message || 'Gagal mengatur webhook 24 jam.' });
+  }
+});
+
+// 3c. ENDPOINT CEK STATUS WEBHOOK SECARA RIIL DARI SERVER (Tanpa Terhalang CORS Browser)
+app.get('/api/telegram/webhook-info', async (req, res) => {
+  try {
+    const userId = (req.query.userId as string) || 'usr_faiz_02';
+    const allSettings = readAllUserSettings();
+    const cfg = allSettings[userId] || {};
+    const cleanToken = cleanTelegramToken((req.query.token as string) || cfg.telegramBotToken || '');
+    if (!cleanToken) {
+      return res.status(400).json({ success: false, message: 'Token Bot belum diatur.' });
+    }
+    const whRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getWebhookInfo`, {
+      signal: AbortSignal.timeout(8000)
+    });
+    const whData: any = await whRes.json();
+    if (!whData.ok) {
+      return res.status(400).json({ success: false, message: whData.description || 'Gagal mengambil info webhook.' });
+    }
+
+    let botInfo: any = null;
+    try {
+      const meRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getMe`, { signal: AbortSignal.timeout(5000) });
+      const meData: any = await meRes.json();
+      if (meData.ok) botInfo = meData.result;
+    } catch {}
+
+    const isPollerActive = telegramPoller.getStatus(userId).active;
+
+    res.json({
+      success: true,
+      info: whData.result,
+      bot: botInfo,
+      isPollerActive,
+      mode: whData.result?.url ? 'webhook' : (isPollerActive ? 'polling' : 'none')
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Gagal mengecek webhook Telegram.' });
+  }
+});
+
+// 3d. ENDPOINT HAPUS WEBHOOK & BERALIH KE MODE REALTIME SERVER POLLER
+app.post('/api/telegram/remove-webhook', async (req, res) => {
+  try {
+    const { token, userId, googleSheetUrl } = req.body || {};
+    const targetUserId = userId || 'usr_faiz_02';
+    const allSettings = readAllUserSettings();
+    const cfg = allSettings[targetUserId] || {};
+    const cleanToken = cleanTelegramToken(token || cfg.telegramBotToken || '');
+    const cleanSheet = (googleSheetUrl || cfg.googleSheetUrl || '').trim();
+
+    if (!cleanToken) {
+      return res.status(400).json({ success: false, message: 'Token Bot belum diatur.' });
+    }
+
+    // 1. Hapus webhook di Telegram API
+    await fetch(`https://api.telegram.org/bot${cleanToken}/deleteWebhook?drop_pending_updates=false`, {
+      signal: AbortSignal.timeout(8000)
+    }).catch(() => {});
+
+    // 2. Aktifkan Mode Polling Server Realtime
+    const pollerRes = await telegramPoller.startPoller(targetUserId, cleanToken, cleanSheet, { forceResetWebhook: true });
+
+    res.json({
+      success: true,
+      message: '✅ Webhook dinonaktifkan. Mode Polling Server Realtime kini aktif 100%!',
+      poller: pollerRes
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Gagal menonaktifkan webhook.' });
+  }
+});
+
+// 3e. ENDPOINT VERIFIKASI URL GOOGLE APPS SCRIPT
+app.post('/api/telegram/verify-gas-url', async (req, res) => {
+  try {
+    const { url } = req.body || {};
+    const cleanUrl = (url || '').trim();
+    if (!cleanUrl || !cleanUrl.startsWith('http')) {
+      return res.status(400).json({ success: false, message: 'URL Google Apps Script wajib diisi.' });
+    }
+
+    if (cleanUrl.includes('docs.google.com/spreadsheets')) {
+      return res.json({
+        success: false,
+        isSpreadsheetUrl: true,
+        message: '⚠️ URL ini adalah tautan spreadsheet biasa, bukan URL Web App (/exec). Buka Ekstensi > Apps Script > Terapkan > Aplikasi Web.'
+      });
+    }
+
+    try {
+      const pingRes = await fetch(`${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}action=get_telegram_status`, {
+        headers: { 'Accept': 'application/json, text/html' },
+        signal: AbortSignal.timeout(10000)
+      });
+      const text = await pingRes.text();
+
+      if (text.includes('Page not found') || text.includes('Sorry, unable to open the file') || pingRes.status === 404) {
+        return res.json({
+          success: false,
+          isDeploymentError: true,
+          message: '⚠️ Google Apps Script mengembalikan "Page not found". Pastikan di Apps Script: Terapkan > Kelola Penerapan > Edit > Versi: Baru > Siapa saja yang memiliki akses: Siapa saja (Anyone).'
+        });
+      }
+
+      if (text.includes('accounts.google.com') || text.includes('ServiceLogin')) {
+        return res.json({
+          success: false,
+          isAuthError: true,
+          message: '⚠️ Google Apps Script meminta login Google. Ubah pengaturan akses Web App: "Siapa saja yang memiliki akses: Siapa saja" (Anyone), bukan "Hanya saya".'
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: '✅ URL Google Apps Script Web App aktif dan dapat diakses dengan baik.'
+      });
+    } catch (e: any) {
+      return res.json({
+        success: false,
+        message: `⚠️ Gagal mengakses URL Google Apps Script: ${e.message}`
+      });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 3f. ENDPOINT SINKRONISASI TOKEN BOT BARU SECARA INSTAN
+app.post('/api/telegram/sync-bot-token', async (req, res) => {
+  try {
+    const { token, userId, googleSheetUrl } = req.body || {};
+    const cleanToken = cleanTelegramToken(token);
+    const targetUserId = userId || 'usr_faiz_02';
+
+    if (!cleanToken) {
+      return res.status(400).json({ success: false, message: 'Token Bot wajib diisi.' });
+    }
+
+    // 1. Verifikasi token ke Telegram getMe
+    const getMeRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getMe`, {
+      signal: AbortSignal.timeout(8000)
+    });
+    const getMeData: any = await getMeRes.json();
+    if (!getMeData.ok) {
+      return res.status(400).json({
+        success: false,
+        message: `Token ditolak oleh Telegram: ${getMeData.description || 'Token tidak valid'}. Periksa token dari @BotFather.`
+      });
+    }
+    const botInfo = getMeData.result;
+
+    // 2. Simpan token baru ke database user_settings & users
+    const allSettings = readAllUserSettings();
+    const existing = allSettings[targetUserId] || {};
+    const effectiveSheet = googleSheetUrl || existing.googleSheetUrl || '';
+
+    // Pemutusan Cerdas: Putuskan seluruh koneksi bot terdahulu & bersihkan webhook lama
+    await severAndDisconnectOldTelegramBots(cleanToken, (existing as any)?.telegramBotToken, targetUserId);
+
+    writeUserSettings(targetUserId, {
+      telegramBotToken: cleanToken,
+      googleSheetUrl: effectiveSheet
+    });
+
+    const allUsers = readStoredUsers();
+    const uIdx = allUsers.findIndex(u => u.id === targetUserId);
+    if (uIdx !== -1) {
+      allUsers[uIdx].telegramBotToken = cleanToken;
+      if (effectiveSheet) allUsers[uIdx].googleSheetUrl = effectiveSheet;
+      writeStoredUsers(allUsers);
+    }
+
+    // 3. Mulai bot listener
+    const pollerRes = await telegramPoller.startPoller(targetUserId, cleanToken, effectiveSheet);
+
+    res.json({
+      success: true,
+      message: `🎉 Bot @${botInfo.username} (ID: ${botInfo.id}) berhasil dihubungkan 100%!`,
+      bot: {
+        id: botInfo.id,
+        username: botInfo.username,
+        firstName: botInfo.first_name
+      },
+      poller: pollerRes
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Gagal menyinkronkan token bot.' });
   }
 });
 

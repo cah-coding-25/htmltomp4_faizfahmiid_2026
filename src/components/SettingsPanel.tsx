@@ -768,17 +768,120 @@ export default function SettingsPanel({
     }
     setIsCheckingWebhook(true);
     try {
-      const res = await fetch(`https://api.telegram.org/bot${cleanToken}/getWebhookInfo`);
-      const data = await res.json();
-      if (data.ok && data.result) {
-        setWebhookInfo(data.result);
+      // Prioritaskan endpoint server agar tidak terkena CORS
+      const res = await fetch(`/api/telegram/webhook-info?token=${encodeURIComponent(cleanToken)}&userId=${encodeURIComponent(currentUser?.id || '')}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.info) {
+          setWebhookInfo(data.info);
+          if (data.bot?.username) {
+            setBotDetails(data.bot);
+          }
+          if (data.isPollerActive !== undefined) {
+            setServerBotStatus(prev => ({
+              ...prev,
+              active: data.isPollerActive,
+              botUsername: data.bot?.username || prev.botUsername
+            }));
+          }
+          return;
+        }
+      }
+      // Fallback direct
+      const directRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getWebhookInfo`);
+      const directData = await directRes.json();
+      if (directData.ok && directData.result) {
+        setWebhookInfo(directData.result);
       } else {
-        setWebhookMessage(`⚠️ Gagal mengecek webhook: ${data.description || 'Token tidak valid'}`);
+        setWebhookMessage(`⚠️ Gagal mengecek webhook: ${directData.description || 'Token tidak valid'}`);
       }
     } catch (e: any) {
       setWebhookMessage(`⚠️ Gagal menghubungi Telegram: ${e.message}`);
     } finally {
       setIsCheckingWebhook(false);
+    }
+  };
+
+  const handleRemoveWebhookAndSwitchToPoller = async () => {
+    const cleanToken = cleanTelegramToken(telegramBotToken);
+    if (!cleanToken) {
+      setWebhookMessage('⚠️ Masukkan Token Bot Telegram terlebih dahulu.');
+      return;
+    }
+    setIsAutoSettingUp(true);
+    setWebhookStatus('loading');
+    setWebhookMessage('Menonaktifkan Webhook & mengaktifkan Mode Server Realtime...');
+    try {
+      const res = await fetch('/api/telegram/remove-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: cleanToken,
+          userId: currentUser?.id,
+          googleSheetUrl: googleSheetUrl.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWebhookStatus('success');
+        setWebhookMessage('🚀 Mode Server Realtime Berhasil Diaktifkan! Bot kini merespon pesan chat secara instan langsung dari server.');
+        setWebhookInfo({ url: '', pending_update_count: 0 });
+        setServerBotStatus(prev => ({ ...prev, active: true }));
+      } else {
+        setWebhookStatus('failed');
+        setWebhookMessage(`⚠️ ${data.message || 'Gagal beralih ke Mode Server'}`);
+      }
+    } catch (e: any) {
+      setWebhookStatus('failed');
+      setWebhookMessage(`⚠️ Error: ${e.message}`);
+    } finally {
+      setIsAutoSettingUp(false);
+      handleCheckWebhookInfo();
+    }
+  };
+
+  const handleSyncNewBotToken = async () => {
+    const cleanToken = cleanTelegramToken(telegramBotToken);
+    if (!cleanToken) {
+      setWebhookStatus('failed');
+      setWebhookMessage('⚠️ Masukkan Token Bot Telegram baru dari @BotFather terlebih dahulu.');
+      return;
+    }
+    setIsAutoSettingUp(true);
+    setWebhookStatus('loading');
+    setWebhookMessage('Memverifikasi dan menghubungkan Bot baru...');
+    try {
+      const res = await fetch('/api/telegram/sync-bot-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: cleanToken,
+          userId: currentUser?.id,
+          googleSheetUrl: googleSheetUrl.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.bot?.username) {
+          setBotDetails(data.bot);
+        }
+        setWebhookStatus('success');
+        setWebhookMessage(data.message || '🎉 Bot baru berhasil dihubungkan 100%!');
+        setServerBotStatus(prev => ({
+          ...prev,
+          active: true,
+          botUsername: data.bot?.username || prev.botUsername
+        }));
+        handleCheckWebhookInfo();
+      } else {
+        setWebhookStatus('failed');
+        setWebhookMessage(`⚠️ ${data.message || 'Gagal menyinkronkan token bot'}`);
+      }
+    } catch (e: any) {
+      setWebhookStatus('failed');
+      setWebhookMessage(`⚠️ Error: ${e.message}`);
+    } finally {
+      setIsAutoSettingUp(false);
     }
   };
 
@@ -1554,9 +1657,21 @@ export default function SettingsPanel({
                   </button>
                 )}
               </div>
-              <div className="flex items-center space-x-1.5 text-[11px] text-blue-600 dark:text-blue-400 font-medium">
-                <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
-                <span>Setiap user memiliki bot sendiri. Anda bebas mengganti bot kapan saja tanpa khawatir data hilang (semua data transaksi di web & spreadsheet tetap utuh).</span>
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center space-x-1.5 text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
+                  <span>Setiap user memiliki bot sendiri. Anda bebas mengganti bot kapan saja tanpa khawatir data hilang (semua data transaksi di web &amp; spreadsheet tetap utuh).</span>
+                </div>
+                <div className="flex items-start space-x-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium bg-indigo-50/60 dark:bg-indigo-950/30 p-2.5 rounded-xl border border-indigo-200/50 dark:border-indigo-900/40">
+                  <Zap className="w-3.5 h-3.5 shrink-0 text-amber-500 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">⚡ Pemutusan Koneksi Bot Lama &amp; Struk Realtime:</p>
+                    <p className="text-[10px] text-slate-600 dark:text-slate-400">
+                      • <b>Pemutusan Cerdas:</b> Saat bot baru disimpan, seluruh koneksi bot terdahulu otomatis diputus agar tidak bentrok.<br />
+                      • <b>Loading Struk Realtime:</b> Setiap input pesan transaksi langsung menampilkan indikator loading dan struk resmi tercatat per detik secara realtime.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1722,46 +1837,45 @@ export default function SettingsPanel({
                   ) : (
                     <Sparkles className="w-4 h-4 text-amber-300" />
                   )}
-                  <span>⚡ Aktifkan Webhook Bot 24 Jam (Apps Script)</span>
+                  <span>⚡ Pasang Webhook 24 Jam (Apps Script)</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={handleSaveAndActivateTelegram}
+                  onClick={handleRemoveWebhookAndSwitchToPoller}
+                  disabled={isAutoSettingUp || !telegramBotToken.trim()}
+                  className="flex items-center space-x-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md shadow-sky-600/20 transition disabled:opacity-50"
+                  title="Gunakan ini jika Apps Script belum dideploy atau ingin bot merespon instan dari server tanpa webhook"
+                >
+                  <Zap className="w-4 h-4 text-amber-300" />
+                  <span>🚀 Mode Realtime Server (Tanpa Webhook)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSyncNewBotToken}
                   disabled={isAutoSettingUp || !telegramBotToken.trim()}
                   className="flex items-center space-x-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition disabled:opacity-50"
+                  title="Hubungkan token bot baru dari BotFather ke sistem"
                 >
-                  <Save className="w-4 h-4 text-white" />
-                  <span>💾 Simpan & Aktifkan Bot</span>
+                  <Bot className="w-4 h-4 text-white" />
+                  <span>🔗 Hubungkan Bot Baru</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleAutoSetupTelegram}
-                  disabled={isAutoSettingUp || !telegramBotToken.trim()}
-                  className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition disabled:opacity-50"
-                >
-                  {isAutoSettingUp ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Zap className="w-4 h-4 text-amber-300" />
-                  )}
-                  <span>{isAutoSettingUp ? 'Sedang Memproses...' : '⚡ Hubungkan & Pasang Otomatis'}</span>
-                </button>
-
-                {telegramBotToken && telegramChatId && (
+                {telegramBotToken && (
                   <button
                     type="button"
                     onClick={handleSendTestMessage}
-                    disabled={testSending}
+                    disabled={testSending || !telegramChatId.trim()}
                     className="flex items-center space-x-1.5 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition disabled:opacity-50"
+                    title={!telegramChatId.trim() ? 'Chat ID diperlukan. Ketik /start di bot Anda terlebih dahulu' : 'Uji pengiriman pesan ke Telegram'}
                   >
                     {testSending ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                     ) : (
                       <Send className="w-3.5 h-3.5 text-blue-500" />
                     )}
-                    <span>Uji Kirim Pesan</span>
+                    <span>🧪 Uji Kirim Pesan</span>
                   </button>
                 )}
 
@@ -1790,33 +1904,39 @@ export default function SettingsPanel({
                     ) : (
                       <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
                     )}
-                    <span>🔍 Cek Webhook Bot</span>
+                    <span>🔍 Cek Status Webhook Riil</span>
                   </button>
                 )}
               </div>
 
               {/* Tampilan Diagnostik Webhook Telegram */}
               {webhookInfo && (
-                <div className="p-3.5 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-xs space-y-2.5 transition">
+                <div className="p-4 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-xs space-y-3 transition">
                   <div className="flex items-center justify-between font-bold text-slate-800 dark:text-slate-200">
                     <span className="flex items-center gap-1.5">
                       <ShieldCheck className="w-4 h-4 text-purple-600" />
-                      Status Webhook Telegram
+                      Status Koneksi Bot Telegram
                     </span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold ${
                       webhookInfo.url 
                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300' 
-                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300'
+                        : (serverBotStatus.active
+                          ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300')
                     }`}>
-                      {webhookInfo.url ? '🟢 Webhook Terpasang' : '⚪ Polling Mode / Belum Ada Webhook'}
+                      {webhookInfo.url 
+                        ? '🟢 Webhook 24 Jam Aktif (Google Apps Script)' 
+                        : (serverBotStatus.active 
+                          ? '🔵 Mode Realtime Server Aktif (Tanpa Webhook)' 
+                          : '⚪ Belum Ada Webhook / Standby')}
                     </span>
                   </div>
 
                   {webhookInfo.url ? (
-                    <div className="space-y-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+                    <div className="space-y-2 text-[11px] text-slate-600 dark:text-slate-300">
                       <div>
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">URL Target Webhook:</span>
-                        <p className="break-all font-mono bg-white dark:bg-slate-950 p-2 rounded-lg border border-slate-200 dark:border-slate-800 text-[10px] text-emerald-600 dark:text-emerald-400">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Target Webhook URL:</span>
+                        <p className="break-all font-mono bg-white dark:bg-slate-950 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[10.5px] text-emerald-600 dark:text-emerald-400">
                           {webhookInfo.url}
                         </p>
                       </div>
@@ -1827,16 +1947,27 @@ export default function SettingsPanel({
                         </span>
                       </div>
                       {webhookInfo.last_error_message && (
-                        <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 rounded-lg border border-rose-200 dark:border-rose-900 mt-1">
-                          <p className="font-bold">⚠️ Pesan Kendala dari Telegram:</p>
-                          <p className="text-[10.5px] mt-0.5 font-mono">{webhookInfo.last_error_message}</p>
+                        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 rounded-lg border border-rose-200 dark:border-rose-900 mt-1">
+                          <p className="font-bold flex items-center gap-1.5">
+                            <AlertTriangle className="w-4 h-4 shrink-0" />
+                            <span>Kendala dari Telegram Webhook:</span>
+                          </p>
+                          <p className="text-[10.5px] mt-1 font-mono leading-relaxed">{webhookInfo.last_error_message}</p>
+                          <p className="text-[11px] mt-2 text-rose-800 dark:text-rose-200">
+                            💡 <b>Solusi Cepat:</b> Klik tombol <b>"🚀 Mode Realtime Server (Tanpa Webhook)"</b> di atas agar bot langsung merespon via server tanpa terhalang kendala webhook Apps Script!
+                          </p>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Webhook belum terpasang. Klik <b>💾 Simpan &amp; Aktifkan Bot</b> di atas untuk mendaftarkan Webhook ke Google Apps Script Anda.
-                    </p>
+                    <div className="space-y-2 text-[11px] text-slate-600 dark:text-slate-400">
+                      <p className="leading-relaxed">
+                        Bot Anda saat ini beroperasi dalam <b>Mode Realtime Server</b> (merespon otomatis saat website berjalan).
+                      </p>
+                      <p className="leading-relaxed">
+                        Jika ingin bot merespon 24 jam nonstop bahkan saat website ditutup, pastikan Google Apps Script sudah dideploy dengan akses "Siapa saja", lalu klik tombol <b>⚡ Pasang Webhook 24 Jam (Apps Script)</b> di atas.
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
