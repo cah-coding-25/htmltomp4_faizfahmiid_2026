@@ -3621,6 +3621,12 @@ app.post('/api/telegram/setup-gas-webhook', async (req, res) => {
     if (!cleanUrl || !cleanUrl.startsWith('http')) {
       return res.status(400).json({ success: false, message: 'URL Google Apps Script Web App wajib diisi.' });
     }
+    if (cleanUrl.includes('docs.google.com/spreadsheets')) {
+      return res.status(400).json({
+        success: false,
+        message: 'URL yang dimasukkan adalah link lembar Google Spreadsheet biasa, bukan URL Web App (akhiran /exec). Silakan deploy Web App di Apps Script (Terapkan > Deployment Baru > Web App) atau jalankan menu "📊 Keuangan FahKeu" > "⚡ Aktifkan Webhook Bot 24 Jam Otomatis" langsung di Google Spreadsheet Anda.'
+      });
+    }
 
     const targetUserId = userId || 'usr_admin_01';
     const allSettings = readAllUserSettings();

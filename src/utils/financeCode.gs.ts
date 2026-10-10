@@ -6,15 +6,15 @@
 export const GOOGLE_APPS_SCRIPT_FINANCE_CODE = `/**
  * ============================================================================
  * GOOGLE APPS SCRIPT - KHUSUS PENCATAT KEUANGAN & BOT TELEGRAM 24 JAM (Code.gs)
- * FahKeu - Aplikasi Pencatat Keuangan Pribadi & Bisnis
+ * FahKeu - Aplikasi Pencatat Keuangan Pribadi & Bisnis (100% GRATIS & NONSTOP)
  * ============================================================================
- * Fitur Unggulan 24 Jam Non-Stop:
- * 1. Webhook Telegram 24/7 Gratis & Cepat (Berjalan di Cloud Server Google).
+ * Fitur Unggulan 24 Jam Non-Stop Tanpa Ketergantungan Server/Vercel:
+ * 1. Webhook Telegram 24/7 Gratis & Cepat (Berjalan langsung di Server Google Cloud).
  * 2. Natural Language Parser Cerdas (beli cimol 3k, gaji masuk 20 juta, kopi 18rb, dll).
- * 3. Menu Interaktif Edit Struk Belanja (Bisa ubah nominal, toko, kategori sebelum simpan).
- * 4. Dukungan OCR AI Vision Opsional (Gemini 2.5 Flash / 1.5 Flash langsung di Apps Script).
- * 5. Integrasi Penuh 3-Arah: Bot Telegram <--> Google Spreadsheet <--> Website Realtime.
- * 6. Perintah Pintar: /start, /saldo, /rekap, /hariini, /bulanini, /hapus, /struk, /reset.
+ * 3. Menu Interaktif Edit Transaksi Lengkap (Bisa ubah nominal, keterangan, kategori, jenis, atau hapus).
+ * 4. Scan Foto Struk / Nota 100% GRATIS (Menggunakan Google Drive OCR bawaan - TANPA API KEY BERBAYAR).
+ * 5. Menu Otomatis 1-Klik di Google Spreadsheet: "📊 Keuangan FahKeu" -> "⚡ Aktifkan Webhook Bot 24 Jam Otomatis".
+ * 6. Perintah Pintar: /start, /saldo, /rekap, /hariini, /bulanini, /edit, /hapus, /struk, /reset.
  */
 
 // Token Bot Telegram bawaan (Otomatis terisi jika Anda salin dari Website)
@@ -22,9 +22,6 @@ var TELEGRAM_BOT_TOKEN = "";
 
 // Chat ID bawaan (Opsional - otomatis terdeteksi saat pertama kali chat bot)
 var DEFAULT_CHAT_ID = "";
-
-// Gemini API Key Opsional (Untuk membaca Foto Struk secara otomatis di Google Apps Script)
-var GEMINI_API_KEY = "";
 
 var TX_SHEET_NAME = "Transactions";
 var CONFIG_SHEET_NAME = "Config";
@@ -38,13 +35,12 @@ function onOpen() {
   try {
     var ui = SpreadsheetApp.getUi();
     ui.createMenu('📊 Keuangan FahKeu')
-      .addItem('📋 Buka Lembar Transaksi', 'menuOpenTxSheet')
-      .addItem('📈 Rekap Saldo & Ringkasan', 'menuShowBalanceSummary')
-      .addSeparator()
       .addItem('⚡ Aktifkan Webhook Bot 24 Jam Otomatis', 'menuSetupWebhook24Jam')
-      .addItem('🤖 Status Integrasi Bot Telegram & Webhook', 'menuShowTelegramStatus')
+      .addItem('🤖 Cek Status Webhook Telegram Riil', 'menuShowTelegramStatus')
+      .addSeparator()
+      .addItem('📋 Buka Lembar Transaksi', 'menuOpenTxSheet')
+      .addItem('📈 Rekap Saldo & Kas Terkini', 'menuShowBalanceSummary')
       .addItem('⚙️ Atur Token Bot & Chat ID Manual', 'menuSetTelegramConfig')
-      .addItem('🔑 Atur Gemini API Key (Opsional - Scan Struk)', 'menuSetGeminiKey')
       .addSeparator()
       .addItem('ℹ️ Status Database Keuangan', 'menuShowStatus')
       .addToUi();
@@ -54,7 +50,7 @@ function onOpen() {
 }
 
 /**
- * Pasang Webhook Bot Telegram 24 Jam Otomatis langsung dari Google Spreadsheet!
+ * Pasang Webhook Bot Telegram 24 Jam Otomatis langsung dari Google Spreadsheet (1-Klik)
  */
 function menuSetupWebhook24Jam() {
   var ui = SpreadsheetApp.getUi();
@@ -76,19 +72,31 @@ function menuSetupWebhook24Jam() {
 
   var webAppUrl = ScriptApp.getService().getUrl();
   if (!webAppUrl) {
-    ui.alert(
-      '⚠️ Belum Ada Deployment Web App',
-      'Silakan klik tombol "Terapkan" (Deploy) > "Deployment baru" > pilih "Aplikasi Web" (Web App) > Yang memiliki akses: "Siapa saja (Anyone)".\\n\\nSetelah itu, jalankan menu ini kembali.',
-      ui.ButtonSet.OK
+    var urlPrompt = ui.prompt(
+      '⚡ Masukkan URL Web App Apps Script',
+      'Belum mendeteksi URL Web App otomatis.\\nJika sudah deploy: Buka Terapkan > Kelola Deployment > Salin URL Web App (berakhiran /exec):',
+      ui.ButtonSet.OK_CANCEL
     );
-    return;
+    if (urlPrompt.getSelectedButton() == ui.Button.OK) {
+      webAppUrl = urlPrompt.getResponseText().trim();
+    } else {
+      ui.alert(
+        'Petunjuk Deploy Web App:',
+        '1. Klik tombol biru "Terapkan" (Deploy) di kanan atas.\\n' +
+        '2. Pilih "Deployment baru" > pilih ikon roda gigi "Aplikasi Web".\\n' +
+        '3. Atur "Yang memiliki akses" = "Siapa saja" (Anyone).\\n' +
+        '4. Klik "Terapkan" lalu jalankan menu ini kembali.',
+        ui.ButtonSet.OK
+      );
+      return;
+    }
   }
 
   var result = registerTelegramWebhookWithToken(token, webAppUrl);
   if (result.success) {
     ui.alert(
       '🎉 Webhook 24 Jam Berhasil Diaktifkan!',
-      'Bot Telegram Anda kini terhubung 100% dan aktif 24 jam nonstop ke Google Spreadsheet ini!\\n\\nTarget URL: ' + webAppUrl + '\\n\\nSilakan buka bot Anda di Telegram dan ketik /start atau catat transaksi langsung!',
+      'Bot Telegram Anda kini terhubung 100% langsung ke Google Apps Script 24 jam nonstop gratis!\\n\\nTarget URL:\\n' + webAppUrl + '\\n\\nSilakan buka bot Anda di Telegram dan ketik /start atau coba ketik: "beli bakso 25k".',
       ui.ButtonSet.OK
     );
   } else {
@@ -103,27 +111,19 @@ function registerTelegramWebhookWithToken(token, webAppUrl) {
     var cleanUrl = webAppUrl.trim();
     var targetWebhookUrl = cleanUrl + (cleanUrl.indexOf('?') !== -1 ? '&' : '?') + 'token=' + encodeURIComponent(cleanToken);
 
-    // 1. Pemutusan Cerdas: Putuskan & cabut webhook pada bot terdahulu jika ada token lama
-    var oldToken = PropertiesService.getScriptProperties().getProperty('TELEGRAM_BOT_TOKEN') || getConfigValue('TELEGRAM_BOT_TOKEN') || TELEGRAM_BOT_TOKEN;
-    if (oldToken && oldToken.trim() !== cleanToken) {
-      try {
-        UrlFetchApp.fetch("https://api.telegram.org/bot" + oldToken.trim() + "/deleteWebhook?drop_pending_updates=true", { muteHttpExceptions: true });
-      } catch (oldErr) {}
-    }
-
-    // 2. Bersihkan antrean pending updates pada token baru
+    // 1. Bersihkan antrean pending updates pada token baru
     try {
       UrlFetchApp.fetch("https://api.telegram.org/bot" + cleanToken + "/deleteWebhook?drop_pending_updates=true", { muteHttpExceptions: true });
     } catch (cleanErr) {}
 
-    // 3. Verifikasi token bot via getMe
+    // 2. Verifikasi token bot via getMe
     var meRes = UrlFetchApp.fetch("https://api.telegram.org/bot" + cleanToken + "/getMe", { muteHttpExceptions: true });
     var meData = JSON.parse(meRes.getContentText());
     if (!meData.ok) {
       return { success: false, message: "Token ditolak oleh Telegram: " + (meData.description || "Token tidak valid") };
     }
 
-    // 4. Pasang Webhook baru dengan drop_pending_updates: true
+    // 3. Pasang Webhook langsung ke URL Google Apps Script
     var res = UrlFetchApp.fetch("https://api.telegram.org/bot" + cleanToken + "/setWebhook", {
       method: "post",
       contentType: "application/json",
@@ -145,17 +145,25 @@ function registerTelegramWebhookWithToken(token, webAppUrl) {
       var currentChatId = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT_ID') || getConfigValue('TELEGRAM_CHAT_ID') || DEFAULT_CHAT_ID;
       if (currentChatId) {
         try {
-          var welcomeNotice = "⚡ <b>Koneksi Bot Telegram Baru Aktif 24 Jam!</b>\\n" +
+          var welcomeNotice = "⚡ <b>Koneksi Bot Telegram 24 Jam Aktif!</b>\\n" +
                               "───────────────────────────\\n" +
                               "🤖 <b>Bot:</b> @" + (meData.result ? meData.result.username : 'bot') + "\\n" +
-                              "✅ <i>Seluruh koneksi bot lama telah diputus secara bersih. Bot ini sekarang aktif 24 jam nonstop untuk Google Spreadsheet Anda!</i>";
+                              "☁️ <b>Server:</b> Google Apps Script (Cloud Google)\\n" +
+                              "⚡ <b>Mode:</b> Realtime 24/7 Jam Non-Stop Gratis\\n" +
+                              "───────────────────────────\\n" +
+                              "Ketik contoh: <code>beli kopi 15k</code> atau <b>/saldo</b> untuk memulai!";
           sendTelegramMessage(currentChatId, welcomeNotice, cleanToken);
-        } catch (wErr) {}
+        } catch (msgErr) {}
       }
 
-      return { success: true, message: data.description || "Webhook 24 jam berhasil dipasang & koneksi bot lama telah diputus." };
+      return {
+        success: true,
+        message: "Webhook 24 Jam berhasil diaktifkan untuk @" + (meData.result ? meData.result.username : 'bot'),
+        bot: meData.result,
+        webhookUrl: targetWebhookUrl
+      };
     } else {
-      return { success: false, message: data.description || "Ditolak oleh Telegram API." };
+      return { success: false, message: data.description || "Gagal mengatur webhook di Telegram" };
     }
   } catch (err) {
     return { success: false, message: err.toString() };
@@ -168,88 +176,58 @@ function registerTelegramWebhookWithToken(token, webAppUrl) {
 function doGet(e) {
   try {
     e = e || {};
-    var parameter = e.parameter || {};
-    var action = (parameter.action || '').toLowerCase().trim();
+    var sheet = getOrCreateTxSheet();
+    var action = extractQueryParam(e, 'action') || (e.parameter ? e.parameter.action : '');
 
-    // 1. Setup & Pendaftaran Webhook Telegram
-    if (action === 'setup_telegram') {
-      return handleSetupTelegram(parameter);
+    // Diagnostik Webhook Telegram
+    if (action === 'check_webhook' || action === 'webhook_status') {
+      var botToken = getEffectiveBotToken(e);
+      if (!botToken) {
+        return jsonResponse({ success: false, message: "Token bot belum diatur." });
+      }
+      try {
+        var infoRes = UrlFetchApp.fetch("https://api.telegram.org/bot" + botToken + "/getWebhookInfo", { muteHttpExceptions: true });
+        var infoData = JSON.parse(infoRes.getContentText());
+        return jsonResponse(infoData);
+      } catch (errTg) {
+        return jsonResponse({ success: false, error: errTg.toString() });
+      }
     }
 
-    if (action === 'set_webhook') {
-      var tokenToSet = parameter.token || getEffectiveBotToken(e);
-      var currentUrl = parameter.url || ScriptApp.getService().getUrl();
-      var regResult = registerTelegramWebhookWithToken(tokenToSet, currentUrl);
-      return jsonResponse(regResult);
-    }
-
-    // 2. Info Status Webhook & Chat ID untuk Website
-    if (action === 'get_chat_id' || action === 'get_config' || action === 'get_telegram_status') {
-      var storedChatId = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT_ID') || getConfigValue('TELEGRAM_CHAT_ID') || DEFAULT_CHAT_ID || '';
-      var storedUsername = PropertiesService.getScriptProperties().getProperty('TELEGRAM_USERNAME') || getConfigValue('TELEGRAM_USERNAME') || '';
-      var storedName = PropertiesService.getScriptProperties().getProperty('TELEGRAM_NAME') || getConfigValue('TELEGRAM_NAME') || '';
-      var hasToken = Boolean(getEffectiveBotToken(e));
+    // Ping / Test Koneksi
+    if (action === 'ping' || action === 'test') {
       return jsonResponse({
         success: true,
-        chatId: storedChatId,
-        username: storedUsername,
-        name: storedName,
-        configured: Boolean(storedChatId),
-        hasToken: hasToken,
-        webAppUrl: ScriptApp.getService().getUrl() || ''
+        message: "Google Apps Script FahKeu Aktif 24 Jam!",
+        timestamp: new Date().toISOString()
       });
     }
 
-    if (action === 'get_webhook_info') {
-      var botToken = getEffectiveBotToken(e);
-      if (!botToken) return jsonResponse({ success: false, message: "Bot token belum diatur." });
-      var infoRes = UrlFetchApp.fetch("https://api.telegram.org/bot" + botToken + "/getWebhookInfo", { muteHttpExceptions: true });
-      return ContentService.createTextOutput(infoRes.getContentText()).setMimeType(ContentService.MimeType.JSON);
+    // Ambil Chat ID
+    if (action === 'get_chat_id' || action === 'chat_id') {
+      var activeChatId = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT_ID') || getConfigValue('TELEGRAM_CHAT_ID') || DEFAULT_CHAT_ID;
+      var activeUsername = PropertiesService.getScriptProperties().getProperty('TELEGRAM_USERNAME') || getConfigValue('TELEGRAM_USERNAME') || '';
+      return jsonResponse({
+        success: Boolean(activeChatId),
+        chatId: activeChatId,
+        username: activeUsername
+      });
     }
 
-    if (action === 'test_message') {
-      var tToken = getEffectiveBotToken(e);
-      var tChatId = parameter.chatId || PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT_ID') || getConfigValue('TELEGRAM_CHAT_ID') || DEFAULT_CHAT_ID;
-      if (!tToken || !tChatId) return jsonResponse({ success: false, message: "Token atau Chat ID belum tersedia." });
-      var testTxt = parameter.text || "🔔 <b>Tes Koneksi FahKeu:</b>\\n\\n✅ Bot Telegram & Google Apps Script berfungsi normal 100%!";
-      sendTelegramMessage(tChatId, testTxt, tToken);
-      return jsonResponse({ success: true, message: "Pesan tes berhasil dikirim ke Telegram." });
-    }
-
-    // 3. Fallback Mutasi Transaksi via GET jika POST terkena pembatasan CORS browser
-    if (action === 'add' || action === 'edit' || action === 'update' || action === 'delete' || action === 'clear' || action === 'batch_add' || action === 'sync_all') {
-      var payload = { action: action };
-      if (parameter.data) {
-        try { payload = Object.assign(payload, JSON.parse(parameter.data)); } catch (err) {}
-      }
-      if (parameter.transactions) {
-        try { payload.transactions = typeof parameter.transactions === 'string' ? JSON.parse(parameter.transactions) : parameter.transactions; } catch(err) {}
-      }
-      if (parameter.transaction) {
-        try { payload.transaction = typeof parameter.transaction === 'string' ? JSON.parse(parameter.transaction) : parameter.transaction; } catch(err) {}
-      }
-      if (parameter.id) payload.id = parameter.id;
-      if (parameter.userId) payload.userId = parameter.userId;
-      if (parameter.username) payload.username = parameter.username;
-      return handleTxAction(payload);
-    }
-
-    // 4. Ambil Seluruh Daftar Transaksi (Sync ke Website)
-    var sheet = getOrCreateTxSheet();
+    // Ambil Data Transaksi
+    var targetUserId = extractQueryParam(e, 'userId') || (e.parameter ? e.parameter.userId : '');
+    var targetUsername = extractQueryParam(e, 'username') || (e.parameter ? e.parameter.username : '');
     var rows = sheet.getDataRange().getValues();
     var transactions = [];
-    var targetUserId = parameter.userId || '';
-    var targetUsername = parameter.username ? parameter.username.toLowerCase().trim() : '';
 
     for (var i = 1; i < rows.length; i++) {
       var row = rows[i];
-      if (!row[0]) continue;
+      if (!row[0] || row[0].toString().trim() === '') continue;
 
       var txUserId = row[7] ? row[7].toString().trim() : '';
-      var txUsername = row[8] ? row[8].toString().toLowerCase().trim() : '';
+      var txUsername = row[8] ? row[8].toString().trim() : '';
       var txSource = row[6] ? row[6].toString().toLowerCase().trim() : '';
 
-      // Tampilkan seluruh transaksi milik pengguna
       if (targetUserId && targetUserId !== 'all') {
         var isMatch = (txUserId === targetUserId) || 
                       (targetUsername && txUsername === targetUsername) ||
@@ -280,7 +258,6 @@ function doGet(e) {
       });
     }
 
-    // Urutkan transaksi dari yang paling baru
     transactions.sort(function(a, b) {
       return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
@@ -321,12 +298,12 @@ function doPost(e) {
       }
     }
 
-    // A. WEBHOOK DARI TELEGRAM (Pesan, Foto, Callback Query Tombol Interaktif)
+    // A. WEBHOOK TELEGRAM REALTIME (Pesan, Foto, Callback Button)
     if (postData && (postData.message || postData.channel_post || postData.edited_message || postData.callback_query)) {
       return handleTelegramWebhook(postData, e);
     }
 
-    // B. SETUP OTOMATIS TELEGRAM DARI WEBSITE
+    // B. SETUP TELEGRAM DARI WEBSITE
     if (postData && (postData.action === 'setup_telegram' || postData.action === 'setupTelegram')) {
       return handleSetupTelegram(postData);
     }
@@ -337,7 +314,7 @@ function doPost(e) {
       return jsonResponse(registerTelegramWebhookWithToken(botToken, currentUrl));
     }
 
-    // C. AKSI MUTASI TRANSAKSI DARI WEBSITE
+    // C. AKSI TRANSAKSI DARI WEBSITE
     if (postData && postData.action) {
       return handleTxAction(postData);
     }
@@ -393,14 +370,14 @@ function handleSetupTelegram(params) {
 }
 
 // ----------------------------------------------------------------------------
-// HANDLER AKSI TRANSAKSI DARI APLIKASI WEB
+// HANDLER AKSI TRANSAKSI DARI WEBSITE
 // ----------------------------------------------------------------------------
 function handleTxAction(payload) {
   try {
     var sheet = getOrCreateTxSheet();
     var action = payload.action;
 
-    // 1. TAMBAH TRANSAKSI (ADD)
+    // 1. Tambah Transaksi (Add)
     if (action === 'add') {
       var tx = payload.transaction || payload;
       if (!tx || !tx.amount) {
@@ -417,17 +394,7 @@ function handleTxAction(payload) {
       var uIdStr = tx.userId || getEffectiveUserId();
       var uNameStr = tx.username || getEffectiveUsername();
 
-      sheet.appendRow([
-        txId,
-        dateStr,
-        typeStr,
-        amountNum,
-        descStr,
-        catStr,
-        srcStr,
-        uIdStr,
-        uNameStr
-      ]);
+      sheet.appendRow([txId, dateStr, typeStr, amountNum, descStr, catStr, srcStr, uIdStr, uNameStr]);
 
       return jsonResponse({
         success: true,
@@ -446,7 +413,7 @@ function handleTxAction(payload) {
       });
     }
 
-    // 2. UBAH TRANSAKSI (EDIT / UPDATE)
+    // 2. Edit Transaksi (Edit / Update)
     if (action === 'edit' || action === 'update') {
       var editTx = payload.transaction || payload;
       var editTargetId = editTx.id || payload.id;
@@ -467,7 +434,7 @@ function handleTxAction(payload) {
       return jsonResponse({ success: false, error: "Transaksi dengan ID tersebut tidak ditemukan" });
     }
 
-    // 3. TAMBAH BANYAK TRANSAKSI (BATCH ADD / DUA ARAH)
+    // 3. Batch Add / Sinkronisasi Dua Arah
     if (action === 'batch_add' || action === 'sync_all') {
       var txList = payload.transactions || payload.data || [];
       if (typeof txList === 'string') {
@@ -475,11 +442,7 @@ function handleTxAction(payload) {
       }
 
       if (!Array.isArray(txList) || txList.length === 0) {
-        return jsonResponse({
-          success: true,
-          message: "Tidak ada transaksi yang perlu ditambahkan",
-          addedCount: 0
-        });
+        return jsonResponse({ success: true, message: "Tidak ada transaksi yang perlu ditambahkan", addedCount: 0 });
       }
 
       var existingRows = sheet.getDataRange().getValues();
@@ -524,7 +487,7 @@ function handleTxAction(payload) {
       });
     }
 
-    // 4. HAPUS TRANSAKSI (DELETE)
+    // 4. Hapus Transaksi (Delete)
     if (action === 'delete') {
       var targetId = payload.id || (payload.transaction ? payload.transaction.id : '');
       if (!targetId) return jsonResponse({ success: false, error: "ID transaksi diperlukan" });
@@ -539,39 +502,12 @@ function handleTxAction(payload) {
       return jsonResponse({ success: false, error: "Transaksi tidak ditemukan" });
     }
 
-    // 5. KOSONGKAN TRANSAKSI (CLEAR - RESET KE RP 0)
+    // 5. Kosongkan Transaksi (Clear - Reset ke Rp 0)
     if (action === 'clear') {
       var lastRow = sheet.getLastRow();
       if (lastRow > 1) {
         sheet.deleteRows(2, lastRow - 1);
       }
-      try {
-        var ss = SpreadsheetApp.getActiveSpreadsheet();
-        var sheet1 = ss.getSheetByName("Sheet1");
-        if (sheet1 && sheet1.getLastRow() > 1) {
-          sheet1.deleteRows(2, sheet1.getLastRow() - 1);
-        }
-      } catch (s1Err) {}
-
-      // Beritahu Bot Telegram bahwa seluruh data transaksi telah dibersihkan
-      try {
-        var botToken = getEffectiveBotToken(payload);
-        var activeChatId = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT_ID') || 
-                           getConfigValue('TELEGRAM_CHAT_ID') || 
-                           DEFAULT_CHAT_ID;
-        if (botToken && activeChatId) {
-          var resetNotice = "🗑️ <b>Pemberitahuan Sistem FahKeu:</b>\\n\\n" +
-                            "Seluruh data transaksi telah <b>dikosongkan dari Website!</b>\\n\\n" +
-                            "📊 <b>Rekap Saldo Kas Baru:</b>\\n" +
-                            "📥 <b>Total Pemasukan:</b> Rp 0\\n" +
-                            "📤 <b>Total Pengeluaran:</b> Rp 0\\n" +
-                            "💰 <b>Sisa Saldo Kas:</b> <b>Rp 0</b>\\n" +
-                            "───────────────────────────\\n" +
-                            "✅ <i>Bot Telegram, Website, & Google Spreadsheet kini kembali sinkron dari nol (Rp 0).</i>";
-          sendTelegramMessage(activeChatId, resetNotice, botToken);
-        }
-      } catch (tgNotifyErr) {}
-
       return jsonResponse({ success: true, message: "Seluruh data transaksi berhasil dikosongkan (Reset Rp 0)" });
     }
 
@@ -584,14 +520,14 @@ function handleTxAction(payload) {
 }
 
 // ----------------------------------------------------------------------------
-// HANDLER WEBHOOK BOT TELEGRAM 24 JAM
+// HANDLER WEBHOOK BOT TELEGRAM 24 JAM (SUPER CERDAS)
 // ----------------------------------------------------------------------------
 function handleTelegramWebhook(update, rawEvent) {
   try {
     update = update || {};
     var webhookStartTime = new Date().getTime();
 
-    // 1. Anti-Spam: Deduplikasi update_id
+    // 1. Anti-Spam deduplikasi update_id
     var updateId = update.update_id;
     if (updateId) {
       try {
@@ -607,7 +543,7 @@ function handleTelegramWebhook(update, rawEvent) {
     var token = getEffectiveBotToken(rawEvent);
 
     // ========================================================================
-    // A. PENANGANAN CALLBACK QUERY (TOMBOL INTERAKTIF DI TELEGRAM)
+    // A. PENANGANAN CALLBACK QUERY (TOMBOL INTERAKTIF TELEGRAM)
     // ========================================================================
     if (update.callback_query) {
       return handleTelegramCallbackQuery(update.callback_query, token);
@@ -619,7 +555,6 @@ function handleTelegramWebhook(update, rawEvent) {
     var chatId = msg.chat ? msg.chat.id : null;
     if (!chatId) return jsonResponse({ success: true, note: "no chat id" });
 
-    // Abaikan pesan lama (> 180 detik)
     var nowSeconds = Math.floor(new Date().getTime() / 1000);
     if (msg.date && (nowSeconds - msg.date > 180)) {
       return jsonResponse({ success: true, note: "stale message ignored" });
@@ -643,21 +578,25 @@ function handleTelegramWebhook(update, rawEvent) {
           PropertiesService.getScriptProperties().setProperty('TELEGRAM_USERNAME', senderUsername);
           setConfigValue('TELEGRAM_USERNAME', senderUsername);
         }
-        if (senderName) {
-          PropertiesService.getScriptProperties().setProperty('TELEGRAM_NAME', senderName);
-          setConfigValue('TELEGRAM_NAME', senderName);
-        }
       } catch (cErr) {}
     }
 
-    // Berikan status mengetik instan
     sendTelegramChatAction(chatId, "typing", token);
 
     var appUserId = getEffectiveUserId(rawEvent) || chatId.toString();
     var appUsername = getEffectiveUsername(rawEvent) || senderUsername || senderName;
 
     // ========================================================================
-    // B. PENANGANAN INPUT PENGGUNA YANG SEDANG MENGEDIT DRAF STRUK
+    // B. PENANGANAN STATE EDIT TRANSAKSI (User sedang mengetik koreksi)
+    // ========================================================================
+    var waitingEditState = getWaitingEditState(chatId);
+    if (waitingEditState && waitingEditState.txId) {
+      var editRes = handleWaitingEditInput(chatId, waitingEditState, rawUserText, token);
+      if (editRes) return jsonResponse({ success: true, action: "edit_applied" });
+    }
+
+    // ========================================================================
+    // C. PENANGANAN STATE DRAF STRUK (User sedang mengedit draf struk belanja)
     // ========================================================================
     var pendingDraft = getActiveUserDraft(chatId);
     if (pendingDraft && pendingDraft.waitingFor) {
@@ -671,10 +610,10 @@ function handleTelegramWebhook(update, rawEvent) {
           if (pendingDraft.messageId) {
             editTelegramMessage(chatId, pendingDraft.messageId, formatDraftPreview(pendingDraft), getReceiptPreviewMarkup(pendingDraft.id), token);
           }
-          sendTelegramMessage(chatId, "✅ <b>Nominal diperbarui:</b> Rp " + formatRupiahJs(parsedNewAmt) + "\\n<i>Periksa pratinjau di atas lalu klik Simpan.</i>", token);
+          sendTelegramMessage(chatId, "✅ <b>Nominal struk diperbarui:</b> Rp " + formatRupiahJs(parsedNewAmt) + "\\n<i>Periksa pratinjau di atas lalu klik Simpan ke Catatan.</i>", token);
           return jsonResponse({ success: true, action: "amount_updated" });
         } else {
-          sendTelegramMessage(chatId, "⚠️ <i>Format nominal belum tepat. Masukkan angka nominal yang benar, contoh: <code>45k</code>, <code>45000</code>, atau <code>1.5jt</code></i>", token);
+          sendTelegramMessage(chatId, "⚠️ <i>Format nominal belum tepat. Masukkan angka contoh: <code>45k</code>, <code>45000</code>, atau <code>1.5jt</code></i>", token);
           return jsonResponse({ success: true, action: "amount_retry" });
         }
       }
@@ -689,14 +628,14 @@ function handleTelegramWebhook(update, rawEvent) {
           if (pendingDraft.messageId) {
             editTelegramMessage(chatId, pendingDraft.messageId, formatDraftPreview(pendingDraft), getReceiptPreviewMarkup(pendingDraft.id), token);
           }
-          sendTelegramMessage(chatId, "✅ <b>Toko / Keterangan diperbarui:</b> " + escapeHtml(rawUserText) + "\\n<i>Periksa pratinjau di atas lalu klik Simpan.</i>", token);
+          sendTelegramMessage(chatId, "✅ <b>Toko / Keterangan diperbarui:</b> " + escapeHtml(rawUserText) + "\\n<i>Periksa pratinjau di atas lalu klik Simpan ke Catatan.</i>", token);
           return jsonResponse({ success: true, action: "desc_updated" });
         }
       }
     }
 
     // ========================================================================
-    // C. PENANGANAN FOTO / STRUK BELANJA DARI TELEGRAM
+    // D. PENANGANAN FOTO STRUK / NOTA (100% GRATIS TANPA API KEY BERBAYAR)
     // ========================================================================
     if (hasPhoto) {
       var photoCaption = rawUserText;
@@ -707,7 +646,7 @@ function handleTelegramWebhook(update, rawEvent) {
         fileId = msg.document.file_id;
       }
 
-      // 1. Coba baca caption jika ada (misal "indomaret 45k" atau "bensin 25rb")
+      // 1. Coba baca caption jika user menyertakan teks (misal: "indomaret 45k")
       var captionParsed = photoCaption ? parseFinanceText(photoCaption) : null;
       var draftId = "dr_" + new Date().getTime();
 
@@ -724,21 +663,20 @@ function handleTelegramWebhook(update, rawEvent) {
         waitingFor: null
       };
 
-      // 2. Jika tidak ada caption, coba Gemini Vision API jika key tersedia
-      var geminiKey = getEffectiveGeminiKey();
-      if (!captionParsed && geminiKey && fileId) {
-        sendTelegramMessage(chatId, "⏳ <i>Membaca struk menggunakan AI Vision...</i>", token);
-        var visionResult = tryGeminiReceiptOcr(fileId, geminiKey, token);
-        if (visionResult && visionResult.amount > 0) {
-          draftData.amount = visionResult.amount;
-          draftData.description = visionResult.description || visionResult.storeName || "Struk Belanja";
-          draftData.storeName = visionResult.storeName || draftData.description;
-          draftData.category = visionResult.category || "Belanja & Pribadi";
-          draftData.type = visionResult.type || "pengeluaran";
+      // 2. Jika tidak ada caption, lakukan OCR 100% GRATIS via Google Drive OCR
+      if (!captionParsed && fileId) {
+        sendTelegramChatAction(chatId, "typing", token);
+        var freeOcrResult = tryFreeGoogleDriveReceiptOcr(fileId, token);
+        if (freeOcrResult && freeOcrResult.amount > 0) {
+          draftData.amount = freeOcrResult.amount;
+          draftData.description = freeOcrResult.description || freeOcrResult.storeName || "Struk Belanja";
+          draftData.storeName = freeOcrResult.storeName || draftData.description;
+          draftData.category = freeOcrResult.category || "Belanja & Pribadi";
+          draftData.type = freeOcrResult.type || "pengeluaran";
         }
       }
 
-      // Simpan draf struk dan kirim pratinjau dengan tombol edit
+      // Simpan draf struk dan kirim pratinjau interaktif dengan tombol edit lengkap
       saveUserDraft(chatId, draftData);
       var previewText = formatDraftPreview(draftData);
       var keyboard = getReceiptPreviewMarkup(draftId);
@@ -755,20 +693,20 @@ function handleTelegramWebhook(update, rawEvent) {
     var lowerText = rawUserText.toLowerCase();
 
     // ========================================================================
-    // D. PERINTAH-PERINTAH CERDAS TELEGRAM
+    // E. PERINTAH-PERINTAH CERDAS TELEGRAM
     // ========================================================================
 
     // 1. Perintah /start atau bantuan
     if (lowerText === '/start' || lowerText.indexOf('/start') === 0 || lowerText === 'bantuan' || lowerText === 'help' || lowerText === '/help') {
       var currentSummary = calculateSummaryMetrics();
       var welcome = "👋 Halo, <b>" + escapeHtml(senderName) + "</b>! (@" + escapeHtml(senderUsername || 'user') + ")\\n\\n" +
-                    "🤖 <b>Bot FahKeu Aktif 24 Jam Non-Stop!</b>\\n" +
+                    "🤖 <b>Bot Keuangan FahKeu Aktif 24 Jam Non-Stop!</b>\\n" +
                     "───────────────────────────\\n" +
                     "🆔 <b>Chat ID Anda:</b> <code>" + chatId + "</code>\\n" +
                     "💰 <b>Saldo Kas Saat Ini:</b> <b>Rp " + formatRupiahJs(currentSummary.balance) + "</b> (" + currentSummary.count + " catatan)\\n\\n" +
-                    "🧾 <b>Kirim Foto Struk / Nota:</b>\\n" +
-                    "Kirim foto bon belanja langsung ke sini! Dilengkapi menu pratinjau & bisa diedit sebelum disimpan.\\n\\n" +
-                    "✍️ <b>Contoh Mencatat Transaksi Teks:</b>\\n" +
+                    "🧾 <b>Kirim Foto Struk / Nota (100% Gratis):</b>\\n" +
+                    "Kirim foto bon belanja langsung ke sini! Dilengkapi pratinjau & tombol edit sebelum disimpan.\\n\\n" +
+                    "✍️ <b>Contoh Mencatat Transaksi Cepat:</b>\\n" +
                     "• <code>beli cimol 3k</code> (Pengeluaran)\\n" +
                     "• <code>kopi kenangan 18rb</code> (Pengeluaran)\\n" +
                     "• <code>makan bakso 25k</code> (Pengeluaran)\\n" +
@@ -777,12 +715,12 @@ function handleTelegramWebhook(update, rawEvent) {
                     "• <code>terima freelance 1.5jt</code> (Pemasukan)\\n\\n" +
                     "📊 <b>Perintah Praktis:</b>\\n" +
                     "• <b>/saldo</b> : Cek sisa uang riil & kas saat ini\\n" +
-                    "• <b>/rekap</b> : Laporan 5 transaksi terakhir\\n" +
+                    "• <b>/rekap</b> : Laporan transaksi terakhir\\n" +
+                    "• <b>/edit</b> : Edit transaksi terakhir (ubah nominal/kategori/ket)\\n" +
+                    "• <b>/hapus</b> : Batalkan transaksi terakhir\\n" +
                     "• <b>/hariini</b> : Mutasi kas khusus hari ini\\n" +
-                    "• <b>/bulanini</b> : Mutasi kas bulan ini\\n" +
-                    "• <b>/hapus</b> : Batalkan transaksi yang baru dicatat\\n" +
-                    "• <b>/struk</b> : Panduan kirim struk belanja\\n\\n" +
-                    "✅ <i>Tersinkronisasi 100% otomatis ke Website & Google Spreadsheet Anda!</i>";
+                    "• <b>/bulanini</b> : Mutasi kas bulan ini\\n\\n" +
+                    "✅ <i>Tersinkronisasi 100% otomatis ke Google Spreadsheet & Website FahKeu!</i>";
 
       var startKeyboard = {
         inline_keyboard: [
@@ -791,7 +729,7 @@ function handleTelegramWebhook(update, rawEvent) {
             { text: "📊 Rekap Kas", callback_data: "cmd_rekap" }
           ],
           [
-            { text: "🧾 Panduan Struk", callback_data: "cmd_struk" },
+            { text: "✏️ Edit Terakhir", callback_data: "cmd_edit_last" },
             { text: "🗑️ Batalkan Terakhir", callback_data: "cmd_hapus" }
           ]
         ]
@@ -802,13 +740,13 @@ function handleTelegramWebhook(update, rawEvent) {
     }
 
     // 2. Perintah /id atau /chatid
-    if (lowerText === '/id' || lowerText === '/chatid' || lowerText === 'id' || lowerText === 'chat id') {
+    if (lowerText === '/id' || lowerText === '/chatid' || lowerText === 'id') {
       var idInfo = "🆔 <b>Informasi Telegram Chat ID:</b>\\n" +
                    "───────────────────────────\\n" +
                    "Chat ID Anda: <code>" + chatId + "</code>\\n" +
                    "Nama: <b>" + escapeHtml(senderName) + "</b>\\n" +
                    "Username: @" + escapeHtml(senderUsername || '-') + "\\n\\n" +
-                   "✅ <i>Chat ID ini telah otomatis tersimpan & terhubung ke Google Apps Script dan Website Anda.</i>";
+                   "✅ <i>Chat ID ini telah otomatis tersimpan & terhubung 24 jam nonstop ke Google Apps Script dan Website Anda.</i>";
       sendTelegramMessage(chatId, idInfo, token);
       return jsonResponse({ success: true });
     }
@@ -818,7 +756,7 @@ function handleTelegramWebhook(update, rawEvent) {
       var summarySaldo = calculateSummaryMetrics();
       var defNotice = "";
       if (summarySaldo.totalIncome === 0 && summarySaldo.totalExpense > 0) {
-        defNotice = "\\n💡 <i>Catatan: Belum ada pemasukan/saldo awal dicatat. Ketik contoh: <code>saldo awal 500rb</code> atau <code>gaji 3jt</code> agar sisa kas riil Anda bernilai positif.</i>";
+        defNotice = "\\n💡 <i>Catatan: Belum ada pemasukan dicatat. Ketik contoh: <code>saldo awal 500rb</code> atau <code>gaji 3jt</code> agar saldo bernilai positif.</i>";
       } else if (summarySaldo.balance < 0) {
         defNotice = "\\n⚠️ <i>Total pengeluaran melebihi pemasukan (Defisit Rp " + formatRupiahJs(Math.abs(summarySaldo.balance)) + ").</i>";
       }
@@ -830,12 +768,15 @@ function handleTelegramWebhook(update, rawEvent) {
                      "───────────────────────────\\n" +
                      "💵 <b>Sisa Saldo Kas (Uang Riil):</b> <b>Rp " + formatRupiahJs(summarySaldo.balance) + "</b>" + defNotice + "\\n\\n" +
                      "📝 <b>Total Transaksi:</b> " + summarySaldo.count + " catatan\\n" +
-                     "<i>Sinkron realtime dengan Website & Google Spreadsheet.</i>";
+                     "<i>Sinkron realtime langsung dengan Google Spreadsheet & Website.</i>";
 
       var saldoKeyboard = {
         inline_keyboard: [
           [
             { text: "📊 Rekap Transaksi", callback_data: "cmd_rekap" },
+            { text: "✏️ Edit Terakhir", callback_data: "cmd_edit_last" }
+          ],
+          [
             { text: "🗑️ Batalkan Terakhir", callback_data: "cmd_hapus" }
           ]
         ]
@@ -847,41 +788,33 @@ function handleTelegramWebhook(update, rawEvent) {
 
     // 4. Perintah /rekap atau laporan
     if (lowerText === '/rekap' || lowerText === 'rekap' || lowerText === 'laporan' || lowerText === 'ringkasan') {
-      var rekapMsg = generateRekapMessage();
-      sendTelegramMessage(chatId, rekapMsg, token);
+      sendTelegramMessage(chatId, generateRekapMessage(), token);
       return jsonResponse({ success: true });
     }
 
     // 4b. Perintah /hariini (Mutasi khusus hari ini)
     if (lowerText === '/hariini' || lowerText === 'hari ini' || lowerText === 'mutasi hari ini') {
-      var todayMsg = generateTodaySummaryMessage();
-      sendTelegramMessage(chatId, todayMsg, token);
+      sendTelegramMessage(chatId, generateTodaySummaryMessage(), token);
       return jsonResponse({ success: true });
     }
 
     // 4c. Perintah /bulanini (Mutasi bulan ini)
     if (lowerText === '/bulanini' || lowerText === 'bulan ini') {
-      var monthMsg = generateMonthSummaryMessage();
-      sendTelegramMessage(chatId, monthMsg, token);
+      sendTelegramMessage(chatId, generateMonthSummaryMessage(), token);
       return jsonResponse({ success: true });
     }
 
-    // 5. Perintah /struk atau /nota (Panduan Kirim & Edit Struk)
-    if (lowerText === '/struk' || lowerText === '/nota' || lowerText === 'struk' || lowerText === 'nota') {
-      var strukGuide = "🧾 <b>Panduan Kirim &amp; Edit Struk Belanja:</b>\\n" +
-                       "───────────────────────────\\n" +
-                       "Anda dapat mengirim <b>foto struk, nota belanja, atau bon kasir</b> langsung ke chat bot ini!\\n\\n" +
-                       "💡 <b>Fitur Edit Sebelum Simpan:</b>\\n" +
-                       "Saat foto struk dikirim, bot otomatis menampilkan pratinjau disertai tombol:\\n" +
-                       "• <b>💾 Simpan ke Catatan:</b> Langsung simpan ke sheet & website.\\n" +
-                       "• <b>✏️ Ubah Nominal:</b> Koreksi nominal jika ada salah baca.\\n" +
-                       "• <b>✏️ Ubah Toko / Ket:</b> Ganti nama toko atau keterangan.\\n" +
-                       "• <b>🏷️ Ganti Kategori:</b> Pilih kategori yang sesuai.\\n" +
-                       "• <b>🔄 Ganti Jenis:</b> Beralih Pengeluaran atau Pemasukan.\\n" +
-                       "• <b>❌ Batal:</b> Batalkan pemindaian struk.\\n\\n" +
-                       "👉 Anda juga dapat mengirim foto disertai keterangan & nominal pada caption, contoh:\\n" +
-                       "<code>indomaret 45k</code> atau <code>kopi kenangan 18rb</code>.";
-      sendTelegramMessage(chatId, strukGuide, token);
+    // 5. Perintah /edit (Fitur Edit Transaksi Interaktif)
+    if (lowerText === '/edit' || lowerText.indexOf('/edit') === 0 || lowerText === 'edit') {
+      var lastTx = getLastUserTransaction(chatId);
+      if (!lastTx) {
+        sendTelegramMessage(chatId, "⚠️ Belum ada transaksi yang dapat diedit. Silakan catat transaksi terlebih dahulu.", token);
+        return jsonResponse({ success: true });
+      }
+
+      var editPreview = formatTxEditPreview(lastTx);
+      var editKeyboard = getTxEditMarkup(lastTx.id);
+      sendTelegramMessageWithMarkup(chatId, editPreview, editKeyboard, token);
       return jsonResponse({ success: true });
     }
 
@@ -921,13 +854,11 @@ function handleTelegramWebhook(update, rawEvent) {
     }
 
     // ========================================================================
-    // E. NATURAL LANGUAGE PARSER BAHASA INDONESIA SUPER PINTAR
+    // F. NATURAL LANGUAGE PARSER BAHASA INDONESIA SUPER PINTAR
     // ========================================================================
     var parsedTx = parseFinanceText(rawUserText);
     if (parsedTx && parsedTx.amount > 0) {
-      // 0. Kirim status loading tanda bot memproses transaksi & menerbitkan struk realtime
       sendTelegramChatAction(chatId, "typing", token);
-      var loadingMsgId = sendTelegramMessage(chatId, "⏳ <b>Mencatat Transaksi...</b>\\n🧾 <i>Memverifikasi format &amp; menyiapkan struk realtime...</i>", token);
 
       var txSheet = getOrCreateTxSheet();
       var newTxId = 'tg_' + new Date().getTime();
@@ -952,20 +883,19 @@ function handleTelegramWebhook(update, rawEvent) {
 
       var noticeDef = "";
       if (postSummary.totalIncome === 0 && postSummary.totalExpense > 0) {
-        noticeDef = "\\n💡 <i>Catatan: Belum ada pemasukan/saldo awal dicatat. Ketik contoh: <code>saldo awal 500rb</code> atau <code>gaji 3jt</code> agar sisa kas riil Anda bernilai positif.</i>";
+        noticeDef = "\\n💡 <i>Catatan: Belum ada pemasukan dicatat. Ketik contoh: <code>saldo awal 500rb</code> atau <code>gaji 3jt</code> agar saldo bernilai positif.</i>";
       } else if (postSummary.balance < 0) {
         noticeDef = "\\n⚠️ <i>Total pengeluaran melebihi pemasukan (Defisit).</i>";
       }
 
       var elapsedMs = Math.max(1, new Date().getTime() - webhookStartTime);
-      var elapsedSec = (elapsedMs / 1000).toFixed(2);
       var exactSecondWib = Utilities.formatDate(new Date(), "Asia/Jakarta", "dd/MM/yyyy HH:mm:ss 'WIB'");
 
       var recordReply = "🧾 ═══════════════════════\\n" +
-                        "     <b>STRUK BUKTI TRANSAKSI RESMI</b>\\n" +
+                        "     <b>STRUK TRANSAKSI RESMI FAHKEU</b>\\n" +
                         "═══════════════════════════\\n" +
                         "🟢 <b>STATUS : BERHASIL TERCATAT</b>\\n" +
-                        "⚡ <b>Respon :</b> " + elapsedSec + " detik (" + elapsedMs + " ms) • Realtime\\n" +
+                        "⚡ <b>Respon :</b> " + (elapsedMs / 1000).toFixed(2) + " detik • Realtime 24 Jam\\n" +
                         "📅 <b>Waktu  :</b> " + exactSecondWib + "\\n" +
                         "🆔 <b>Struk  :</b> <code>#" + newTxId + "</code>\\n" +
                         "───────────────────────────\\n" +
@@ -980,32 +910,25 @@ function handleTelegramWebhook(update, rawEvent) {
                         "💰 <b>Sisa Kas : Rp " + formatRupiahJs(postSummary.balance) + "</b>" + noticeDef + "\\n" +
                         "───────────────────────────\\n" +
                         "✅ <i>Tersimpan otomatis di Google Spreadsheet &amp; Website FahKeu!</i>\\n" +
-                        "═══════════════════════════\\n" +
-                        "💡 <i>Ketik <b>/hapus</b> jika ingin membatalkan transaksi ini.</i>";
+                        "═══════════════════════════";
 
+      // Tombol aksi interaktif: BISA EDIT LANGSUNG DARI TELEGRAM!
       var actionKeyboard = {
         inline_keyboard: [
           [
-            { text: "💰 Cek Saldo", callback_data: "cmd_saldo" },
-            { text: "📊 Rekap Kas", callback_data: "cmd_rekap" }
+            { text: "✏️ Edit Transaksi Ini", callback_data: "tx_edit:" + newTxId },
+            { text: "🗑️ Batalkan / Hapus", callback_data: "tx_del:" + newTxId }
           ],
           [
-            { text: "🗑️ Batalkan Transaksi", callback_data: "cmd_hapus" }
+            { text: "💰 Cek Saldo", callback_data: "cmd_saldo" },
+            { text: "📊 Rekap Kas", callback_data: "cmd_rekap" }
           ]
         ]
       };
 
-      if (loadingMsgId) {
-        var edited = editTelegramMessage(chatId, loadingMsgId, recordReply, actionKeyboard, token);
-        if (!edited) {
-          sendTelegramMessageWithMarkup(chatId, recordReply, actionKeyboard, token);
-        }
-      } else {
-        sendTelegramMessageWithMarkup(chatId, recordReply, actionKeyboard, token);
-      }
+      sendTelegramMessageWithMarkup(chatId, recordReply, actionKeyboard, token);
       return jsonResponse({ success: true, recorded: parsedTx });
     } else {
-      // Bantuan santai jika format belum terbaca
       var helpPrompt = "🤔 Format belum terbaca sebagai transaksi.\\n\\n" +
                        "💡 <b>Coba ketik seperti ini:</b>\\n" +
                        "• <code>beli cimol 3k</code>\\n" +
@@ -1014,7 +937,7 @@ function handleTelegramWebhook(update, rawEvent) {
                        "• <code>gaji masuk 20 juta</code>\\n" +
                        "• <code>bensin motor 25.000</code>\\n" +
                        "• Atau kirim <b>foto struk / nota belanja</b> 🧾\\n\\n" +
-                       "Ketik <b>/saldo</b> untuk cek uang atau <b>/bantuan</b> untuk panduan.";
+                       "Ketik <b>/saldo</b> untuk cek saldo, <b>/edit</b> untuk ubah transaksi, atau <b>/bantuan</b>.";
       sendTelegramMessage(chatId, helpPrompt, token);
       return jsonResponse({ success: true });
     }
@@ -1037,7 +960,7 @@ function handleTelegramCallbackQuery(cb, token) {
     var chatId = message.chat.id;
     var messageId = message.message_id;
 
-    // Perintah Cepat
+    // A. Perintah Cepat
     if (cbData === 'cmd_saldo') {
       answerTelegramCallback(cbId, "Mengambil saldo terkini...", token);
       var sumSaldo = calculateSummaryMetrics();
@@ -1066,9 +989,14 @@ function handleTelegramCallbackQuery(cb, token) {
       return jsonResponse({ success: true });
     }
 
-    if (cbData === 'cmd_struk') {
-      answerTelegramCallback(cbId, "Panduan struk...", token);
-      sendTelegramMessage(chatId, "🧾 Kirim foto struk belanja Anda langsung ke sini untuk pencatatan otomatis!", token);
+    if (cbData === 'cmd_edit_last') {
+      answerTelegramCallback(cbId, "Membuka menu edit...", token);
+      var lastTx = getLastUserTransaction(chatId);
+      if (lastTx) {
+        sendTelegramMessageWithMarkup(chatId, formatTxEditPreview(lastTx), getTxEditMarkup(lastTx.id), token);
+      } else {
+        sendTelegramMessage(chatId, "⚠️ Belum ada transaksi yang dapat diedit.", token);
+      }
       return jsonResponse({ success: true });
     }
 
@@ -1085,7 +1013,133 @@ function handleTelegramCallbackQuery(cb, token) {
       return jsonResponse({ success: true });
     }
 
-    // Interaksi Draf Struk Belanja
+    // ========================================================================
+    // B. FITUR EDIT TRANSAKSI INTERAKTIF (tx_edit:*)
+    // ========================================================================
+
+    // 1. Tampilkan Menu Edit
+    if (cbData.indexOf('tx_edit:') === 0) {
+      var txId = cbData.split(':')[1];
+      var txData = getTransactionById(txId);
+      if (!txData) {
+        answerTelegramCallback(cbId, "Transaksi tidak ditemukan.", token);
+        return jsonResponse({ success: true });
+      }
+      answerTelegramCallback(cbId, "Menu edit dibuka", token);
+      editTelegramMessage(chatId, messageId, formatTxEditPreview(txData), getTxEditMarkup(txId), token);
+      return jsonResponse({ success: true });
+    }
+
+    // 2. Edit Nominal
+    if (cbData.indexOf('tx_edit_amt:') === 0) {
+      var txId = cbData.split(':')[1];
+      setWaitingEditState(chatId, { txId: txId, field: 'amount', messageId: messageId });
+      answerTelegramCallback(cbId, "Ketik nominal baru di chat", token);
+      sendTelegramMessage(chatId, "✏️ <b>Ubah Nominal Transaksi:</b>\\n\\nKetikkan angka nominal baru di chat, contoh: <code>35k</code>, <code>35000</code>, atau <code>1.5jt</code>.", token);
+      return jsonResponse({ success: true });
+    }
+
+    // 3. Edit Keterangan
+    if (cbData.indexOf('tx_edit_desc:') === 0) {
+      var txId = cbData.split(':')[1];
+      setWaitingEditState(chatId, { txId: txId, field: 'desc', messageId: messageId });
+      answerTelegramCallback(cbId, "Ketik keterangan baru di chat", token);
+      sendTelegramMessage(chatId, "✏️ <b>Ubah Keterangan / Toko:</b>\\n\\nKetikkan keterangan baru di chat, contoh: <code>Kopi Kenangan</code> atau <code>Bensin Pertamax</code>.", token);
+      return jsonResponse({ success: true });
+    }
+
+    // 4. Menu Ubah Kategori
+    if (cbData.indexOf('tx_edit_cat:') === 0) {
+      var txId = cbData.split(':')[1];
+      var catMarkup = {
+        inline_keyboard: [
+          [
+            { text: "🍽️ Makanan & Minum", callback_data: "tx_set_cat:" + txId + ":Makanan & Minuman" },
+            { text: "🛒 Belanja & Pribadi", callback_data: "tx_set_cat:" + txId + ":Belanja & Pribadi" }
+          ],
+          [
+            { text: "🚗 Transportasi", callback_data: "tx_set_cat:" + txId + ":Transportasi" },
+            { text: "💡 Tagihan & Utilitas", callback_data: "tx_set_cat:" + txId + ":Tagihan & Utilitas" }
+          ],
+          [
+            { text: "💼 Bisnis & Usaha", callback_data: "tx_set_cat:" + txId + ":Bisnis & Operasional" },
+            { text: "📦 Lainnya", callback_data: "tx_set_cat:" + txId + ":Lainnya" }
+          ],
+          [
+            { text: "🔙 Kembali", callback_data: "tx_edit:" + txId }
+          ]
+        ]
+      };
+      answerTelegramCallback(cbId, "Pilih kategori", token);
+      editTelegramMessage(chatId, messageId, "📂 <b>Pilih Kategori Baru untuk Transaksi #" + txId + ":</b>", catMarkup, token);
+      return jsonResponse({ success: true });
+    }
+
+    // 5. Simpan Kategori Baru
+    if (cbData.indexOf('tx_set_cat:') === 0) {
+      var parts = cbData.split(':');
+      var txId = parts[1];
+      var newCat = parts.slice(2).join(':') || 'Lainnya';
+      updateTransactionField(txId, 'category', newCat);
+      var updatedTx = getTransactionById(txId);
+      answerTelegramCallback(cbId, "Kategori: " + newCat, token);
+      editTelegramMessage(chatId, messageId, formatTxEditPreview(updatedTx), getTxEditMarkup(txId), token);
+      return jsonResponse({ success: true });
+    }
+
+    // 6. Ganti Jenis (Pengeluaran <-> Pemasukan)
+    if (cbData.indexOf('tx_toggle_type:') === 0) {
+      var txId = cbData.split(':')[1];
+      var txData = getTransactionById(txId);
+      if (txData) {
+        var newType = txData.type === 'pengeluaran' ? 'pemasukan' : 'pengeluaran';
+        updateTransactionField(txId, 'type', newType);
+        var updatedTx = getTransactionById(txId);
+        answerTelegramCallback(cbId, "Jenis diubah ke " + newType, token);
+        editTelegramMessage(chatId, messageId, formatTxEditPreview(updatedTx), getTxEditMarkup(txId), token);
+      }
+      return jsonResponse({ success: true });
+    }
+
+    // 7. Hapus Transaksi Tertentu
+    if (cbData.indexOf('tx_del:') === 0) {
+      var txId = cbData.split(':')[1];
+      var delRes = deleteTransactionById(txId);
+      if (delRes.success) {
+        answerTelegramCallback(cbId, "Transaksi berhasil dihapus!", token);
+        var newMetrics = calculateSummaryMetrics();
+        var delMsg = "🗑️ <b>Transaksi #" + txId + " Berhasil Dihapus!</b>\\n\\n" +
+                     "• Keterangan: <b>" + escapeHtml(delRes.description) + "</b>\\n" +
+                     "• Nominal: Rp " + formatRupiahJs(delRes.amount) + "\\n" +
+                     "• Sisa Saldo Kas: <b>Rp " + formatRupiahJs(newMetrics.balance) + "</b>\\n\\n" +
+                     "✅ <i>Telah dihapus dari Google Spreadsheet & Website.</i>";
+        editTelegramMessage(chatId, messageId, delMsg, { inline_keyboard: [] }, token);
+      } else {
+        answerTelegramCallback(cbId, "Transaksi tidak ditemukan.", token);
+      }
+      return jsonResponse({ success: true });
+    }
+
+    // 8. Selesai Edit
+    if (cbData.indexOf('tx_done:') === 0) {
+      var txId = cbData.split(':')[1];
+      var finalTx = getTransactionById(txId);
+      answerTelegramCallback(cbId, "Edit selesai", token);
+      var doneKeyboard = {
+        inline_keyboard: [
+          [
+            { text: "✏️ Edit Lagi", callback_data: "tx_edit:" + txId },
+            { text: "💰 Cek Saldo", callback_data: "cmd_saldo" }
+          ]
+        ]
+      };
+      editTelegramMessage(chatId, messageId, "✅ <b>Transaksi #" + txId + " Tersimpan:</b>\\n\\n" + formatTxSummaryLine(finalTx), doneKeyboard, token);
+      return jsonResponse({ success: true });
+    }
+
+    // ========================================================================
+    // C. INTERAKSI DRAF STRUK BELANJA (dr_*)
+    // ========================================================================
     var pendingDraft = getActiveUserDraft(chatId);
 
     // 1. Simpan Draf Struk
@@ -1124,10 +1178,21 @@ function handleTelegramCallbackQuery(cb, token) {
                       "📤 <b>Total Pengeluaran:</b> Rp " + formatRupiahJs(postSum.totalExpense) + "\\n" +
                       "💰 <b>Sisa Saldo Kas:</b> <b>Rp " + formatRupiahJs(postSum.balance) + "</b>\\n" +
                       "───────────────────────────\\n" +
-                      "✅ <i>Tersimpan di Google Spreadsheet & Website FahKeu!</i>\\n\\n" +
-                      "💡 <i>Ketik <b>/hapus</b> jika ingin membatalkan transaksi ini.</i>";
+                      "✅ <i>Tersimpan di Google Spreadsheet & Website FahKeu!</i>";
 
-      editTelegramMessage(chatId, messageId, savedText, { inline_keyboard: [] }, token);
+      var postSaveKeyboard = {
+        inline_keyboard: [
+          [
+            { text: "✏️ Edit Transaksi Ini", callback_data: "tx_edit:" + txId },
+            { text: "🗑️ Batalkan", callback_data: "tx_del:" + txId }
+          ],
+          [
+            { text: "💰 Cek Saldo", callback_data: "cmd_saldo" }
+          ]
+        ]
+      };
+
+      editTelegramMessage(chatId, messageId, savedText, postSaveKeyboard, token);
       answerTelegramCallback(cbId, "✅ Struk tersimpan!", token);
       clearUserDraft(chatId);
       return jsonResponse({ success: true });
@@ -1141,31 +1206,31 @@ function handleTelegramCallbackQuery(cb, token) {
       return jsonResponse({ success: true });
     }
 
-    // 3. Ubah Nominal
+    // 3. Ubah Nominal Draf Struk
     if (cbData.indexOf('dr_edit_amt:') === 0) {
       if (pendingDraft) {
         pendingDraft.waitingFor = 'amount';
         pendingDraft.messageId = messageId;
         saveUserDraft(chatId, pendingDraft);
         answerTelegramCallback(cbId, "Ketik nominal baru di chat.", token);
-        sendTelegramMessage(chatId, "✏️ <b>Ubah Nominal:</b>\\n\\nKetikkan angka nominal yang benar di chat ini, contoh: <code>45k</code>, <code>45000</code>, atau <code>1.5jt</code>.", token);
+        sendTelegramMessage(chatId, "✏️ <b>Ubah Nominal Struk:</b>\\n\\nKetikkan angka nominal yang benar di chat, contoh: <code>45k</code>, <code>45000</code>, atau <code>1.5jt</code>.", token);
       }
       return jsonResponse({ success: true });
     }
 
-    // 4. Ubah Toko / Keterangan
+    // 4. Ubah Toko / Keterangan Draf Struk
     if (cbData.indexOf('dr_edit_desc:') === 0) {
       if (pendingDraft) {
         pendingDraft.waitingFor = 'desc';
         pendingDraft.messageId = messageId;
         saveUserDraft(chatId, pendingDraft);
         answerTelegramCallback(cbId, "Ketik nama toko di chat.", token);
-        sendTelegramMessage(chatId, "✏️ <b>Ubah Toko / Keterangan:</b>\\n\\nKetikkan nama toko atau keterangan pengganti di chat ini, contoh: <code>Indomaret</code> atau <code>Kopi Kenangan</code>.", token);
+        sendTelegramMessage(chatId, "✏️ <b>Ubah Toko / Keterangan:</b>\\n\\nKetikkan nama toko atau keterangan pengganti di chat, contoh: <code>Indomaret</code> atau <code>Kopi Kenangan</code>.", token);
       }
       return jsonResponse({ success: true });
     }
 
-    // 5. Menu Ganti Kategori
+    // 5. Menu Ganti Kategori Draf Struk
     if (cbData.indexOf('dr_cat_menu:') === 0) {
       if (pendingDraft) {
         var catMarkup = {
@@ -1193,7 +1258,7 @@ function handleTelegramCallbackQuery(cb, token) {
       return jsonResponse({ success: true });
     }
 
-    // 6. Pilih Kategori
+    // 6. Pilih Kategori Draf Struk
     if (cbData.indexOf('dr_set_cat:') === 0) {
       var parts = cbData.split(':');
       var newCat = parts.slice(2).join(':') || 'Belanja & Pribadi';
@@ -1206,19 +1271,19 @@ function handleTelegramCallbackQuery(cb, token) {
       return jsonResponse({ success: true });
     }
 
-    // 7. Ganti Jenis (Pengeluaran <-> Pemasukan)
+    // 7. Ganti Jenis Draf Struk
     if (cbData.indexOf('dr_toggle_type:') === 0) {
       if (pendingDraft) {
         pendingDraft.type = pendingDraft.type === 'pengeluaran' ? 'pemasukan' : 'pengeluaran';
         saveUserDraft(chatId, pendingDraft);
         var label = pendingDraft.type === 'pengeluaran' ? 'Pengeluaran' : 'Pemasukan';
-        answerTelegramCallback(cbId, "Jenis diubah: " + label, token);
+        answerTelegramCallback(cbId, "Jenis: " + label, token);
         editTelegramMessage(chatId, messageId, formatDraftPreview(pendingDraft), getReceiptPreviewMarkup(pendingDraft.id), token);
       }
       return jsonResponse({ success: true });
     }
 
-    // 8. Kembali ke Pratinjau
+    // 8. Kembali ke Pratinjau Draf
     if (cbData.indexOf('dr_back:') === 0) {
       if (pendingDraft) {
         answerTelegramCallback(cbId, "", token);
@@ -1237,21 +1302,198 @@ function handleTelegramCallbackQuery(cb, token) {
 }
 
 // ----------------------------------------------------------------------------
-// HELPER PRATINJAU DRAF STRUK & KEYBOARD
+// HELPER EDIT TRANSAKSI (Fungsi Pendukung Edit di Telegram)
+// ----------------------------------------------------------------------------
+function formatTxEditPreview(tx) {
+  if (!tx) return "⚠️ Data transaksi tidak ditemukan.";
+  var typeBadge = tx.type === 'pemasukan' ? '🟢 Pemasukan' : '🔴 Pengeluaran';
+  var sign = tx.type === 'pemasukan' ? '+ ' : '- ';
+  return "✏️ <b>MENU EDIT TRANSAKSI</b>\\n" +
+         "───────────────────────────\\n" +
+         "🆔 <b>ID Struk  :</b> <code>#" + tx.id + "</code>\\n" +
+         "🏪 <b>Keterangan:</b> <b>" + escapeHtml(tx.description) + "</b>\\n" +
+         "💵 <b>Nominal   :</b> <b>" + sign + "Rp " + formatRupiahJs(tx.amount) + "</b>\\n" +
+         "📂 <b>Kategori  :</b> " + escapeHtml(tx.category) + "\\n" +
+         "🏷️ <b>Jenis     :</b> " + typeBadge + "\\n" +
+         "───────────────────────────\\n" +
+         "<i>Pilih tombol di bawah untuk mengubah field yang diinginkan:</i>";
+}
+
+function getTxEditMarkup(txId) {
+  return {
+    inline_keyboard: [
+      [
+        { text: "💵 Ubah Nominal", callback_data: "tx_edit_amt:" + txId },
+        { text: "🏪 Ubah Keterangan", callback_data: "tx_edit_desc:" + txId }
+      ],
+      [
+        { text: "📂 Ganti Kategori", callback_data: "tx_edit_cat:" + txId },
+        { text: "🔄 Beralih Jenis (+/-)", callback_data: "tx_toggle_type:" + txId }
+      ],
+      [
+        { text: "🗑️ Hapus Transaksi Ini", callback_data: "tx_del:" + txId },
+        { text: "✅ Selesai", callback_data: "tx_done:" + txId }
+      ]
+    ]
+  };
+}
+
+function formatTxSummaryLine(tx) {
+  if (!tx) return "";
+  var sign = tx.type === 'pemasukan' ? '+' : '-';
+  return "• <b>" + escapeHtml(tx.description) + "</b> (" + sign + " Rp " + formatRupiahJs(tx.amount) + ") [" + escapeHtml(tx.category) + "]";
+}
+
+function getWaitingEditState(chatId) {
+  try {
+    var cache = CacheService.getScriptCache();
+    var val = cache.get("edit_wait_" + chatId);
+    if (val) return JSON.parse(val);
+  } catch (e) {}
+  return null;
+}
+
+function setWaitingEditState(chatId, stateObj) {
+  try {
+    var cache = CacheService.getScriptCache();
+    cache.put("edit_wait_" + chatId, JSON.stringify(stateObj), 900);
+  } catch (e) {}
+}
+
+function clearWaitingEditState(chatId) {
+  try {
+    var cache = CacheService.getScriptCache();
+    cache.remove("edit_wait_" + chatId);
+  } catch (e) {}
+}
+
+function handleWaitingEditInput(chatId, state, rawText, token) {
+  try {
+    var txId = state.txId;
+    var field = state.field;
+    var messageId = state.messageId;
+
+    if (field === 'amount') {
+      var newAmt = parseSimpleAmount(rawText);
+      if (newAmt && newAmt > 0) {
+        updateTransactionField(txId, 'amount', newAmt);
+        clearWaitingEditState(chatId);
+        var updated = getTransactionById(txId);
+        if (messageId) {
+          editTelegramMessage(chatId, messageId, formatTxEditPreview(updated), getTxEditMarkup(txId), token);
+        }
+        sendTelegramMessage(chatId, "✅ <b>Nominal berhasil diubah menjadi:</b> Rp " + formatRupiahJs(newAmt), token);
+        return true;
+      } else {
+        sendTelegramMessage(chatId, "⚠️ Format nominal belum tepat. Masukkan angka contoh: <code>45k</code>, <code>45000</code>, atau <code>1.5jt</code>.", token);
+        return true;
+      }
+    }
+
+    if (field === 'desc') {
+      if (rawText) {
+        updateTransactionField(txId, 'description', rawText);
+        clearWaitingEditState(chatId);
+        var updated = getTransactionById(txId);
+        if (messageId) {
+          editTelegramMessage(chatId, messageId, formatTxEditPreview(updated), getTxEditMarkup(txId), token);
+        }
+        sendTelegramMessage(chatId, "✅ <b>Keterangan berhasil diubah menjadi:</b> " + escapeHtml(rawText), token);
+        return true;
+      }
+    }
+  } catch (e) {
+    Logger.log("handleWaitingEditInput err: " + e.toString());
+  }
+  return false;
+}
+
+function getTransactionById(txId) {
+  var sheet = getOrCreateTxSheet();
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][0] && rows[i][0].toString() === txId.toString()) {
+      return {
+        id: rows[i][0].toString(),
+        date: rows[i][1],
+        type: rows[i][2] ? rows[i][2].toString().toLowerCase() : 'pengeluaran',
+        amount: Number(rows[i][3]) || 0,
+        description: rows[i][4] ? rows[i][4].toString() : '',
+        category: rows[i][5] ? rows[i][5].toString() : 'Lainnya',
+        source: rows[i][6] ? rows[i][6].toString() : 'telegram',
+        rowIndex: i + 1
+      };
+    }
+  }
+  return null;
+}
+
+function getLastUserTransaction(chatId) {
+  var sheet = getOrCreateTxSheet();
+  var rows = sheet.getDataRange().getValues();
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (rows[i][0]) {
+      return {
+        id: rows[i][0].toString(),
+        date: rows[i][1],
+        type: rows[i][2] ? rows[i][2].toString().toLowerCase() : 'pengeluaran',
+        amount: Number(rows[i][3]) || 0,
+        description: rows[i][4] ? rows[i][4].toString() : '',
+        category: rows[i][5] ? rows[i][5].toString() : 'Lainnya',
+        source: rows[i][6] ? rows[i][6].toString() : 'telegram',
+        rowIndex: i + 1
+      };
+    }
+  }
+  return null;
+}
+
+function updateTransactionField(txId, field, value) {
+  var sheet = getOrCreateTxSheet();
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][0] && rows[i][0].toString() === txId.toString()) {
+      var row = i + 1;
+      if (field === 'amount') sheet.getRange(row, 4).setValue(Number(value) || 0);
+      if (field === 'description') sheet.getRange(row, 5).setValue(String(value));
+      if (field === 'category') sheet.getRange(row, 6).setValue(String(value));
+      if (field === 'type') sheet.getRange(row, 3).setValue(String(value).toLowerCase());
+      return true;
+    }
+  }
+  return false;
+}
+
+function deleteTransactionById(txId) {
+  var sheet = getOrCreateTxSheet();
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][0] && rows[i][0].toString() === txId.toString()) {
+      var desc = rows[i][4] || 'Transaksi';
+      var amt = Number(rows[i][3]) || 0;
+      sheet.deleteRow(i + 1);
+      return { success: true, description: desc, amount: amt };
+    }
+  }
+  return { success: false };
+}
+
+// ----------------------------------------------------------------------------
+// HELPER DRAF STRUK & PRATINJAU
 // ----------------------------------------------------------------------------
 function formatDraftPreview(d) {
   var typeTxt = d.type === 'pengeluaran' ? '🔴 Pengeluaran' : '🟢 Pemasukan';
   var nominalTxt = d.amount > 0 ? ("Rp " + formatRupiahJs(d.amount)) : "<i>(Belum terdeteksi - klik Ubah Nominal)</i>";
 
-  return "🧾 <b>PRATINJAU STRUK BELANJA</b>\\n" +
+  return "🧾 <b>PRATINJAU STRUK BELANJA (100% GRATIS)</b>\\n" +
          "<i>Periksa dan edit data sebelum disimpan ke catatan kas:</i>\\n" +
          "───────────────────────────\\n" +
-         "🏪 <b>Toko / Ket:</b> <b>" + escapeHtml(d.description || d.storeName || 'Struk') + "</b>\\n" +
+         "🏪 <b>Toko / Ket:</b> <b>" + escapeHtml(d.description || d.storeName || 'Struk Belanja') + "</b>\\n" +
          "💵 <b>Nominal:</b> <b>" + nominalTxt + "</b>\\n" +
-         "📂 <b>Kategori:</b> <b>" + escapeHtml(d.category || 'Belanja & Pribadi') + "</b>\\n" +
+         "📂 <b>Kategori:</b> " + escapeHtml(d.category || 'Belanja & Pribadi') + "\\n" +
          "🏷️ <b>Jenis:</b> " + typeTxt + "\\n" +
          "───────────────────────────\\n" +
-         "💡 <i>Klik tombol di bawah jika ingin mengoreksi nominal atau nama toko:</i>";
+         "<i>Klik tombol di bawah untuk mengoreksi data atau simpan:</i>";
 }
 
 function getReceiptPreviewMarkup(draftId) {
@@ -1304,7 +1546,7 @@ function clearUserDraft(chatId) {
 function parseFinanceText(text) {
   var clean = text.toLowerCase().trim();
   var amount = 0;
-  var type = 'pengeluaran'; // default
+  var type = 'pengeluaran';
 
   // 1. Deteksi Tipe Transaksi (+ / - atau Kata Kunci)
   if (clean.indexOf('+') === 0) {
@@ -1349,7 +1591,7 @@ function parseFinanceText(text) {
   }
 
   // 2. Ekstraksi Nominal Uang
-  var amountRegex = /(?:rp\.?\s*)?(\d+[\d.,]*)\s*(juta|miliar|jt|ribu|rb|k|m|r)?\b/gi;
+  var amountRegex = /(?:rp\\.?\\s*)?(\\d+[\\d.,]*)\\s*(juta|miliar|jt|ribu|rb|k|m|r)?\\b/gi;
   var match;
   var parsedAmount = 0;
   var originalAmountText = '';
@@ -1405,7 +1647,7 @@ function parseFinanceText(text) {
     }
   }
 
-  // Fallback sebutan kata angka: setengah juta, satu juta, dua juta, seratus ribu
+  // Fallback sebutan kata angka: satu juta, dua juta, seratus ribu, dll
   if (parsedAmount <= 0) {
     if (clean.indexOf('setengah juta') !== -1) { parsedAmount = 500000; originalAmountText = 'setengah juta'; }
     else if (clean.indexOf('satu juta') !== -1) { parsedAmount = 1000000; originalAmountText = 'satu juta'; }
@@ -1449,54 +1691,74 @@ function parseFinanceText(text) {
     cleanedDesc = type === 'pemasukan' ? 'Pemasukan Kas' : 'Pengeluaran Kas';
   }
 
-  var category = detectCategory(cleanedDesc, type);
+  var category = detectCategory(clean, type);
 
   return {
-    type: type,
     amount: parsedAmount,
+    type: type,
     description: cleanedDesc,
     category: category
   };
 }
 
-function parseSimpleAmount(input) {
-  if (!input) return null;
-  var res = parseFinanceText(input);
-  return res ? res.amount : null;
+function parseSimpleAmount(text) {
+  if (!text) return 0;
+  var res = parseFinanceText("bayar " + text);
+  return res ? res.amount : 0;
 }
 
-function detectCategory(desc, type) {
-  var d = desc.toLowerCase();
+function detectCategory(cleanText, type) {
+  var t = cleanText.toLowerCase();
 
   if (type === 'pemasukan') {
-    if (d.match(/(gaji|salary|bulanan|upah|tunjangan|thr)/i)) return 'Gaji & Pendapatan Tetap';
-    if (d.match(/(freelance|sampingan|proyek|project|desain|coding|jasa)/i)) return 'Freelance & Sampingan';
-    if (d.match(/(investasi|saham|reksadana|crypto|cuan|bunga|dividen)/i)) return 'Investasi & Cuan';
-    if (d.match(/(jualan|dagang|bisnis|laba|omset|olshop|toko|warung)/i)) return 'Penjualan & Bisnis';
-    if (d.match(/(transfer|kiriman|orang tua|hadiah|angpao|gift)/i)) return 'Pemberian & Transfer';
-    return 'Pemasukan Kas';
+    if (t.indexOf('gaji') !== -1 || t.indexOf('salary') !== -1) return 'Gaji & Pendapatan';
+    if (t.indexOf('freelance') !== -1 || t.indexOf('proyek') !== -1 || t.indexOf('klien') !== -1) return 'Bisnis & Operasional';
+    if (t.indexOf('jual') !== -1 || t.indexOf('dagang') !== -1 || t.indexOf('laba') !== -1 || t.indexOf('omset') !== -1) return 'Bisnis & Operasional';
+    if (t.indexOf('investasi') !== -1 || t.indexOf('dividen') !== -1 || t.indexOf('crypto') !== -1 || t.indexOf('reksadana') !== -1) return 'Investasi & Tabungan';
+    if (t.indexOf('bonus') !== -1 || t.indexOf('thr') !== -1 || t.indexOf('hadiah') !== -1) return 'Bonus & Hadiah';
+    if (t.indexOf('saldo awal') !== -1 || t.indexOf('modal') !== -1) return 'Saldo Awal';
+    return 'Pemasukan Lainnya';
   }
 
-  // Pengeluaran
-  if (d.match(/(cimol|cilok|cilor|seblak|batagor|siomay|gorengan|martabak|bakso|makan|kopi|minum|sate|nasgor|nasi|warteg|mie|jajan|boba|roti|cafe|resto|restoran|kuliner|ayam|bebek|soto|rawon|snack|cemilan|es|jus|teh|burger|pizza|donat|tahu|tempe)/i)) {
+  if (t.indexOf('makan') !== -1 || t.indexOf('minum') !== -1 || t.indexOf('kopi') !== -1 || 
+      t.indexOf('bakso') !== -1 || t.indexOf('nasgor') !== -1 || t.indexOf('ayam') !== -1 || 
+      t.indexOf('cafe') !== -1 || t.indexOf('warteg') !== -1 || t.indexOf('cimol') !== -1 ||
+      t.indexOf('cilok') !== -1 || t.indexOf('seblak') !== -1 || t.indexOf('jajan') !== -1) {
     return 'Makanan & Minuman';
   }
-  if (d.match(/(bensin|ojek|gojek|grab|mobil|motor|toll|tol|parkir|tiket|kereta|pesawat|bus|travel|pertalite|pertamax|spbu|tambal ban)/i)) {
+
+  if (t.indexOf('bensin') !== -1 || t.indexOf('pertamax') !== -1 || t.indexOf('pertalite') !== -1 || 
+      t.indexOf('parkir') !== -1 || t.indexOf('tol') !== -1 || t.indexOf('gojek') !== -1 || 
+      t.indexOf('grab') !== -1 || t.indexOf('ojol') !== -1 || t.indexOf('servis') !== -1 || 
+      t.indexOf('cuci motor') !== -1 || t.indexOf('cuci mobil') !== -1) {
     return 'Transportasi';
   }
-  if (d.match(/(belanja|baju|shopee|tokped|tokopedia|celana|sepatu|skincare|makeup|salon|potong rambut|mall|supermarket|indomaret|alfamart)/i)) {
-    return 'Belanja & Pribadi';
-  }
-  if (d.match(/(kos|kontrakan|listrik|pln|air|pdam|wifi|indihome|internet|pulsa|kuota|langganan|netflix|spotify|asuransi|bpjs|pajak|cicilan)/i)) {
+
+  if (t.indexOf('listrik') !== -1 || t.indexOf('pln') !== -1 || t.indexOf('pulsa') !== -1 || 
+      t.indexOf('kuota') !== -1 || t.indexOf('wifi') !== -1 || t.indexOf('indihome') !== -1 || 
+      t.indexOf('air') !== -1 || t.indexOf('pdam') !== -1 || t.indexOf('bpjs') !== -1 || 
+      t.indexOf('kos') !== -1 || t.indexOf('kontrakan') !== -1 || t.indexOf('cicilan') !== -1) {
     return 'Tagihan & Utilitas';
   }
-  if (d.match(/(nonton|bioskop|xxi|game|topup|steam|liburan|hotel|wisata|konser|karaoke|healing)/i)) {
+
+  if (t.indexOf('indomaret') !== -1 || t.indexOf('alfamart') !== -1 || t.indexOf('belanja') !== -1 || 
+      t.indexOf('shopee') !== -1 || t.indexOf('tokopedia') !== -1 || t.indexOf('baju') !== -1 || 
+      t.indexOf('celana') !== -1 || t.indexOf('sabun') !== -1 || t.indexOf('supermarket') !== -1) {
+    return 'Belanja & Pribadi';
+  }
+
+  if (t.indexOf('nonton') !== -1 || t.indexOf('bioskop') !== -1 || t.indexOf('game') !== -1 || 
+      t.indexOf('steam') !== -1 || t.indexOf('liburan') !== -1 || t.indexOf('wisata') !== -1) {
     return 'Hiburan & Liburan';
   }
-  if (d.match(/(obat|dokter|rs|rumah sakit|klinik|vitamin|apotek|sakit|gigi)/i)) {
+
+  if (t.indexOf('obat') !== -1 || t.indexOf('apotek') !== -1 || t.indexOf('dokter') !== -1 || 
+      t.indexOf('rumah sakit') !== -1 || t.indexOf('vitamin') !== -1) {
     return 'Kesehatan';
   }
-  if (d.match(/(sedekah|infaq|zakat|masjid|donasi)/i)) {
+
+  if (t.indexOf('sedekah') !== -1 || t.indexOf('infaq') !== -1 || t.indexOf('zakat') !== -1 || 
+      t.indexOf('donasi') !== -1 || t.indexOf('sumbangan') !== -1) {
     return 'Sedekah & Sosial';
   }
 
@@ -1504,46 +1766,209 @@ function detectCategory(desc, type) {
 }
 
 // ----------------------------------------------------------------------------
-// FUNGSI OCR GEMINI VISION DI GOOGLE APPS SCRIPT (OPSIONAL 24 JAM)
+// OCR STRUK 100% GRATIS MENGGUNAKAN GOOGLE DRIVE OCR (TANPA BIAYA / API KEY)
 // ----------------------------------------------------------------------------
-function tryGeminiReceiptOcr(fileId, apiKey, botToken) {
+function tryFreeGoogleDriveReceiptOcr(fileId, botToken) {
   try {
-    if (!fileId || !apiKey || !botToken) return null;
+    if (!fileId || !botToken) return null;
     var fileInfoRes = UrlFetchApp.fetch("https://api.telegram.org/bot" + botToken + "/getFile?file_id=" + fileId, { muteHttpExceptions: true });
     var fileInfo = JSON.parse(fileInfoRes.getContentText());
     if (!fileInfo.ok || !fileInfo.result || !fileInfo.result.file_path) return null;
 
     var filePath = fileInfo.result.file_path;
-    var fileBytes = UrlFetchApp.fetch("https://api.telegram.org/file/bot" + botToken + "/" + filePath).getContent();
-    var base64Img = Utilities.base64Encode(fileBytes);
+    var fileUrl = "https://api.telegram.org/file/bot" + botToken + "/" + filePath;
+    var imageBytes = UrlFetchApp.fetch(fileUrl).getBlob();
 
-    var geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey;
-    var payload = {
-      contents: [{
-        parts: [
-          { text: "Ekstrak struk belanja ini dalam format JSON: { storeName: string, amount: number (total belanja tanpa titik/koma), category: string, description: string, type: 'pengeluaran' }" },
-          { inline_data: { mime_type: "image/jpeg", data: base64Img } }
-        ]
-      }],
-      generationConfig: { response_mime_type: "application/json" }
+    var metadata = {
+      title: "Temp_FahKeu_OCR_" + Date.now(),
+      mimeType: imageBytes.getContentType() || "image/jpeg"
     };
 
-    var geminiRes = UrlFetchApp.fetch(geminiUrl, {
+    var payload = {
+      metadata: Utilities.newBlob(JSON.stringify(metadata), "application/json"),
+      file: imageBytes
+    };
+
+    var driveUploadRes = UrlFetchApp.fetch("https://www.googleapis.com/upload/drive/v2/files?uploadType=multipart&ocr=true&ocrLanguage=id", {
       method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify(payload),
+      headers: {
+        "Authorization": "Bearer " + ScriptApp.getOAuthToken()
+      },
+      payload: payload,
       muteHttpExceptions: true
     });
 
-    var geminiData = JSON.parse(geminiRes.getContentText());
-    if (geminiData.candidates && geminiData.candidates[0].content && geminiData.candidates[0].content.parts) {
-      var rawJson = geminiData.candidates[0].content.parts[0].text;
-      return JSON.parse(rawJson);
+    var uploadData = JSON.parse(driveUploadRes.getContentText());
+    if (uploadData && uploadData.id) {
+      var extractedText = "";
+      try {
+        var doc = DocumentApp.openById(uploadData.id);
+        extractedText = doc.getBody().getText();
+      } catch (docErr) {
+        try {
+          var exportRes = UrlFetchApp.fetch("https://www.googleapis.com/drive/v2/files/" + uploadData.id + "/export?mimeType=text/plain", {
+            headers: { "Authorization": "Bearer " + ScriptApp.getOAuthToken() },
+            muteHttpExceptions: true
+          });
+          extractedText = exportRes.getContentText();
+        } catch (exErr) {}
+      }
+
+      // Hapus file temporary agar Google Drive tetap bersih
+      try {
+        UrlFetchApp.fetch("https://www.googleapis.com/drive/v2/files/" + uploadData.id, {
+          method: "delete",
+          headers: { "Authorization": "Bearer " + ScriptApp.getOAuthToken() },
+          muteHttpExceptions: true
+        });
+      } catch (delErr) {}
+
+      if (extractedText && extractedText.trim()) {
+        return parseReceiptTextInScript(extractedText);
+      }
     }
   } catch (ocrErr) {
-    Logger.log("tryGeminiReceiptOcr error: " + ocrErr.toString());
+    Logger.log("tryFreeGoogleDriveReceiptOcr error: " + ocrErr.toString());
   }
   return null;
+}
+
+function parseReceiptTextInScript(text) {
+  var lines = text.split('\\n');
+  var detectedAmount = 0;
+  var detectedDescription = 'Struk Belanja';
+  var detectedCategory = 'Belanja & Pribadi';
+
+  var totalKeywords = ['total', 'grand total', 'subtotal', 'jumlah', 'netto', 'nett', 'amount', 'bayar', 'cash', 'tunai', 'debit', 'total bayar', 'jml'];
+  var excludeKeywords = ['kembali', 'change', 'diskon', 'discount', 'promo', 'tax', 'pajak', 'ppn', 'service', 'ongkir'];
+
+  var potentialAmounts = [];
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+    var lowerLine = line.toLowerCase();
+
+    var cleanLine = lowerLine.replace(/rp\\.?/g, '').replace(/\\s+/g, '');
+    var matches = cleanLine.match(/\\d+[\\d.,]*/g) || [];
+    
+    for (var j = 0; j < matches.length; j++) {
+      var m = matches[j];
+      var hasMultipleDots = (m.match(/\\./g) || []).length > 1;
+      var hasCommas = m.indexOf(',') !== -1;
+      var hasDots = m.indexOf('.') !== -1;
+      var numVal = 0;
+
+      if (hasMultipleDots) {
+        numVal = parseFloat(m.replace(/\\./g, ''));
+      } else if (hasCommas && hasDots) {
+        numVal = parseFloat(m.replace(/[^0-9]/g, ''));
+      } else if (hasCommas) {
+        var parts = m.split(',');
+        if (parts[1] && parts[1].length === 3) {
+          numVal = parseFloat(m.replace(/,/g, ''));
+        } else {
+          numVal = parseFloat(parts[0].replace(/\\./g, ''));
+        }
+      } else if (hasDots) {
+        var parts = m.split('.');
+        if (parts[1] && parts[1].length === 3) {
+          numVal = parseFloat(m.replace(/\\./g, ''));
+        } else {
+          numVal = parseFloat(parts[0]);
+        }
+      } else {
+        numVal = parseFloat(m);
+      }
+
+      if (numVal > 100 && numVal < 50000000) {
+        var isTotalLine = false;
+        for (var k = 0; k < totalKeywords.length; k++) {
+          if (lowerLine.indexOf(totalKeywords[k]) !== -1) {
+            isTotalLine = true;
+            break;
+          }
+        }
+        var isExcludedLine = false;
+        for (var l = 0; l < excludeKeywords.length; l++) {
+          if (lowerLine.indexOf(excludeKeywords[l]) !== -1) {
+            isExcludedLine = true;
+            break;
+          }
+        }
+        potentialAmounts.push({
+          value: numVal,
+          isTotalLine: isTotalLine && !isExcludedLine
+        });
+      }
+    }
+  }
+
+  // Pilih total belanja terbaik
+  var totalLineMatches = potentialAmounts.filter(function(p) { return p.isTotalLine; });
+  if (totalLineMatches.length > 0) {
+    var maxVal = 0;
+    for (var n = 0; n < totalLineMatches.length; n++) {
+      if (totalLineMatches[n].value > maxVal) maxVal = totalLineMatches[n].value;
+    }
+    detectedAmount = maxVal;
+  } else if (potentialAmounts.length > 0) {
+    var sorted = potentialAmounts.filter(function(p) { return p.value < 10000000; });
+    sorted.sort(function(a, b) { return b.value - a.value; });
+    if (sorted.length > 0) {
+      detectedAmount = sorted[0].value;
+    }
+  }
+
+  // Deteksi Nama Toko
+  var storeKeywords = ['mart', 'cafe', 'coffee', 'restoran', 'resto', 'pertamina', 'apotek', 'laundry', 'trans', 'supermarket', 'indomaret', 'alfamart', 'kopi', 'bakso'];
+  var foundStoreName = '';
+  for (var i = 0; i < Math.min(6, lines.length); i++) {
+    var line = lines[i].trim();
+    if (line.length > 3 && line.length < 35 && !/\\d{4,}/.test(line)) {
+      var isStore = false;
+      for (var s = 0; s < storeKeywords.length; s++) {
+        if (line.toLowerCase().indexOf(storeKeywords[s]) !== -1) {
+          isStore = true;
+          break;
+        }
+      }
+      if (isStore) {
+        foundStoreName = line;
+        break;
+      }
+      if (!foundStoreName && /[a-zA-Z]{4,}/.test(line)) {
+        foundStoreName = line;
+      }
+    }
+  }
+
+  if (foundStoreName) {
+    detectedDescription = 'Nota ' + foundStoreName.replace(/[^a-zA-Z0-9\\s-]/g, '').trim();
+  } else {
+    detectedDescription = 'Nota Belanja';
+  }
+
+  var fullLower = text.toLowerCase();
+  if (fullLower.indexOf('kopi') !== -1 || fullLower.indexOf('coffee') !== -1 || fullLower.indexOf('cafe') !== -1 || fullLower.indexOf('makan') !== -1 || fullLower.indexOf('resto') !== -1) {
+    detectedCategory = 'Makanan & Minuman';
+  } else if (fullLower.indexOf('bensin') !== -1 || fullLower.indexOf('pertamina') !== -1 || fullLower.indexOf('spbu') !== -1 || fullLower.indexOf('parkir') !== -1) {
+    detectedCategory = 'Transportasi';
+  } else if (fullLower.indexOf('listrik') !== -1 || fullLower.indexOf('pln') !== -1 || fullLower.indexOf('pulsa') !== -1 || fullLower.indexOf('kuota') !== -1) {
+    detectedCategory = 'Tagihan & Utilitas';
+  } else if (fullLower.indexOf('obat') !== -1 || fullLower.indexOf('apotek') !== -1) {
+    detectedCategory = 'Kesehatan';
+  } else {
+    detectedCategory = 'Belanja & Pribadi';
+  }
+
+  return {
+    amount: detectedAmount || 0,
+    description: detectedDescription,
+    storeName: detectedDescription,
+    category: detectedCategory,
+    type: 'pengeluaran'
+  };
 }
 
 // ----------------------------------------------------------------------------
@@ -1579,135 +2004,116 @@ function calculateSummaryMetrics() {
   }
 
   return {
+    count: count,
     totalIncome: income,
     totalExpense: expense,
-    balance: income - expense,
-    count: count
+    balance: income - expense
   };
 }
 
 function generateRekapMessage() {
   var sheet = getOrCreateTxSheet();
   var rows = sheet.getDataRange().getValues();
-  var metrics = calculateSummaryMetrics();
+  var summary = calculateSummaryMetrics();
 
-  var msg = "📊 <b>Rekap &amp; Laporan Keuangan FahKeu</b>\\n" +
-            "───────────────────────────\\n" +
-            "🟢 <b>Total Pemasukan:</b> Rp " + formatRupiahJs(metrics.totalIncome) + "\\n" +
-            "🔴 <b>Total Pengeluaran:</b> Rp " + formatRupiahJs(metrics.totalExpense) + "\\n" +
-            "💵 <b>Sisa Saldo Kas:</b> <b>Rp " + formatRupiahJs(metrics.balance) + "</b>\\n" +
-            "───────────────────────────\\n" +
-            "📋 <b>5 Transaksi Terakhir:</b>\\n";
+  var lines = [];
+  var takeCount = 0;
 
-  var recentCount = 0;
-  for (var i = rows.length - 1; i >= 1 && recentCount < 5; i--) {
+  for (var i = rows.length - 1; i >= 1 && takeCount < 5; i--) {
     if (!rows[i][0]) continue;
-    recentCount++;
-    var type = (rows[i][2] || '').toString().toLowerCase();
-    var amt = Number(rows[i][3]) || 0;
-    var desc = rows[i][4] || 'Transaksi';
-    var icon = type === 'pemasukan' ? '🟢' : '🔴';
-    msg += icon + " <b>" + escapeHtml(desc) + "</b>: Rp " + formatRupiahJs(amt) + "\\n";
+    var tType = (rows[i][2] || 'pengeluaran').toString().toLowerCase();
+    var tAmt = Number(rows[i][3]) || 0;
+    var tDesc = rows[i][4] || 'Transaksi';
+    var tCat = rows[i][5] || 'Lainnya';
+    var sign = tType === 'pemasukan' ? '+' : '-';
+    var icon = tType === 'pemasukan' ? '🟢' : '🔴';
+
+    lines.push(icon + " <b>" + escapeHtml(tDesc) + "</b>\\n   " + sign + " Rp " + formatRupiahJs(tAmt) + " (" + escapeHtml(tCat) + ")");
+    takeCount++;
   }
 
-  if (recentCount === 0) {
-    msg += "<i>(Belum ada transaksi tercatat)</i>\\n";
-  }
+  var listText = lines.length > 0 ? lines.join('\\n\\n') : "<i>Belum ada transaksi dicatat.</i>";
 
-  msg += "───────────────────────────\\n" +
-         "💡 <i>Ketik <b>/saldo</b> untuk cek ringkasan saldo kas.</i>";
-
-  return msg;
+  return "📊 <b>REKAP 5 TRANSAKSI TERAKHIR</b>\\n" +
+         "───────────────────────────\\n" +
+         listText + "\\n" +
+         "───────────────────────────\\n" +
+         "📥 <b>Total Pemasukan  :</b> Rp " + formatRupiahJs(summary.totalIncome) + "\\n" +
+         "📤 <b>Total Pengeluaran:</b> Rp " + formatRupiahJs(summary.totalExpense) + "\\n" +
+         "💰 <b>Sisa Saldo Kas   :</b> <b>Rp " + formatRupiahJs(summary.balance) + "</b>\\n" +
+         "📝 <b>Total Transaksi  :</b> " + summary.count + " catatan";
 }
 
 function generateTodaySummaryMessage() {
   var sheet = getOrCreateTxSheet();
   var rows = sheet.getDataRange().getValues();
-  var todayStr = Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd");
+  var todayDateStr = Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd");
 
-  var incomeToday = 0;
-  var expenseToday = 0;
+  var todayIncome = 0;
+  var todayExpense = 0;
   var countToday = 0;
-  var items = [];
 
   for (var i = 1; i < rows.length; i++) {
     if (!rows[i][0]) continue;
     var dVal = rows[i][1];
-    var rowDateStr = "";
+    var txDateStr = "";
     if (dVal instanceof Date) {
-      rowDateStr = Utilities.formatDate(dVal, "Asia/Jakarta", "yyyy-MM-dd");
+      txDateStr = Utilities.formatDate(dVal, "Asia/Jakarta", "yyyy-MM-dd");
     } else if (dVal) {
-      try {
-        rowDateStr = Utilities.formatDate(new Date(dVal), "Asia/Jakarta", "yyyy-MM-dd");
-      } catch(e) {}
+      txDateStr = dVal.toString().substring(0, 10);
     }
 
-    if (rowDateStr === todayStr) {
+    if (txDateStr === todayDateStr) {
+      var tType = (rows[i][2] || 'pengeluaran').toString().toLowerCase();
+      var tAmt = Number(rows[i][3]) || 0;
+      if (tType === 'pemasukan') todayIncome += tAmt;
+      else todayExpense += tAmt;
       countToday++;
-      var type = (rows[i][2] || '').toString().toLowerCase();
-      var amt = Number(rows[i][3]) || 0;
-      var desc = rows[i][4] || 'Transaksi';
-      if (type === 'pemasukan') incomeToday += amt;
-      else expenseToday += amt;
-      items.push({ type: type, amt: amt, desc: desc });
     }
   }
 
-  var msg = "📅 <b>Laporan Mutasi Hari Ini (" + todayStr + ")</b>\\n" +
-            "───────────────────────────\\n" +
-            "🟢 Pemasukan: Rp " + formatRupiahJs(incomeToday) + "\\n" +
-            "🔴 Pengeluaran: Rp " + formatRupiahJs(expenseToday) + "\\n" +
-            "💵 Selisih Hari Ini: <b>Rp " + formatRupiahJs(incomeToday - expenseToday) + "</b>\\n" +
-            "───────────────────────────\\n";
-
-  if (items.length > 0) {
-    for (var k = Math.max(0, items.length - 5); k < items.length; k++) {
-      var it = items[k];
-      msg += (it.type === 'pemasukan' ? '🟢' : '🔴') + " " + escapeHtml(it.desc) + ": Rp " + formatRupiahJs(it.amt) + "\\n";
-    }
-  } else {
-    msg += "<i>Belum ada transaksi dicatat hari ini.</i>\\n";
-  }
-
-  return msg;
+  return "📅 <b>MUTASI KAS HARI INI (" + todayDateStr + ")</b>\\n" +
+         "───────────────────────────\\n" +
+         "📥 <b>Pemasukan Hari Ini  :</b> Rp " + formatRupiahJs(todayIncome) + "\\n" +
+         "📤 <b>Pengeluaran Hari Ini:</b> Rp " + formatRupiahJs(todayExpense) + "\\n" +
+         "💵 <b>Arus Kas Bersih     :</b> Rp " + formatRupiahJs(todayIncome - todayExpense) + "\\n" +
+         "📝 <b>Transaksi Hari Ini  :</b> " + countToday + " catatan";
 }
 
 function generateMonthSummaryMessage() {
   var sheet = getOrCreateTxSheet();
   var rows = sheet.getDataRange().getValues();
-  var monthStr = Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM");
+  var currentMonthStr = Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM");
 
-  var incomeMonth = 0;
-  var expenseMonth = 0;
+  var monthIncome = 0;
+  var monthExpense = 0;
   var countMonth = 0;
 
   for (var i = 1; i < rows.length; i++) {
     if (!rows[i][0]) continue;
     var dVal = rows[i][1];
-    var rowDateStr = "";
+    var txMonthStr = "";
     if (dVal instanceof Date) {
-      rowDateStr = Utilities.formatDate(dVal, "Asia/Jakarta", "yyyy-MM");
+      txMonthStr = Utilities.formatDate(dVal, "Asia/Jakarta", "yyyy-MM");
     } else if (dVal) {
-      try {
-        rowDateStr = Utilities.formatDate(new Date(dVal), "Asia/Jakarta", "yyyy-MM");
-      } catch(e) {}
+      txMonthStr = dVal.toString().substring(0, 7);
     }
 
-    if (rowDateStr === monthStr) {
+    if (txMonthStr === currentMonthStr) {
+      var tType = (rows[i][2] || 'pengeluaran').toString().toLowerCase();
+      var tAmt = Number(rows[i][3]) || 0;
+      if (tType === 'pemasukan') monthIncome += tAmt;
+      else monthExpense += tAmt;
       countMonth++;
-      var type = (rows[i][2] || '').toString().toLowerCase();
-      var amt = Number(rows[i][3]) || 0;
-      if (type === 'pemasukan') incomeMonth += amt;
-      else expenseMonth += amt;
     }
   }
 
-  return "🗓️ <b>Rekap Mutasi Bulan Ini (" + monthStr + ")</b>\\n" +
+  return "🗓️ <b>MUTASI KAS BULAN INI (" + currentMonthStr + ")</b>\\n" +
          "───────────────────────────\\n" +
-         "🟢 <b>Pemasukan:</b> Rp " + formatRupiahJs(incomeMonth) + "\\n" +
-         "🔴 <b>Pengeluaran:</b> Rp " + formatRupiahJs(expenseMonth) + "\\n" +
-         "💵 <b>Surplus / Defisit:</b> <b>Rp " + formatRupiahJs(incomeMonth - expenseMonth) + "</b>\\n" +
-         "📝 <b>Total Transaksi:</b> " + countMonth + " catatan";
+         "📥 <b>Pemasukan Bulan Ini  :</b> Rp " + formatRupiahJs(monthIncome) + "\\n" +
+         "📤 <b>Pengeluaran Bulan Ini:</b> Rp " + formatRupiahJs(monthExpense) + "\\n" +
+         "💵 <b>Arus Kas Bersih      :</b> Rp " + formatRupiahJs(monthIncome - monthExpense) + "\\n" +
+         "📝 <b>Total Transaksi      :</b> " + countMonth + " catatan";
 }
 
 function deleteLastTransaction() {
@@ -1748,19 +2154,26 @@ function sendTelegramMessage(chatId, text, customToken) {
   if (!token || !chatId) return null;
   var url = "https://api.telegram.org/bot" + token + "/sendMessage";
   try {
+    var payloadObj = {
+      chat_id: chatId,
+      text: text,
+      parse_mode: "HTML"
+    };
     var res = UrlFetchApp.fetch(url, {
       method: "post",
       contentType: "application/json",
-      payload: JSON.stringify({ chat_id: chatId, text: text, parse_mode: "HTML" }),
+      payload: JSON.stringify(payloadObj),
       muteHttpExceptions: true
     });
     var d = JSON.parse(res.getContentText());
     if (d.ok && d.result) return d.result.message_id;
     if (res.getResponseCode() !== 200) {
+      delete payloadObj.parse_mode;
+      payloadObj.text = text.replace(/<[^>]*>/g, '');
       var fbRes = UrlFetchApp.fetch(url, {
         method: "post",
         contentType: "application/json",
-        payload: JSON.stringify({ chat_id: chatId, text: text.replace(/<[^>]*>/g, '') }),
+        payload: JSON.stringify(payloadObj),
         muteHttpExceptions: true
       });
       var fbd = JSON.parse(fbRes.getContentText());
@@ -1775,22 +2188,34 @@ function sendTelegramMessageWithMarkup(chatId, text, replyMarkup, customToken) {
   if (!token || !chatId) return null;
   var url = "https://api.telegram.org/bot" + token + "/sendMessage";
   try {
+    var payloadObj = {
+      chat_id: chatId,
+      text: text,
+      parse_mode: "HTML",
+      reply_markup: replyMarkup
+    };
     var res = UrlFetchApp.fetch(url, {
       method: "post",
       contentType: "application/json",
-      payload: JSON.stringify({
-        chat_id: chatId,
-        text: text,
-        parse_mode: "HTML",
-        reply_markup: replyMarkup
-      }),
+      payload: JSON.stringify(payloadObj),
       muteHttpExceptions: true
     });
     var d = JSON.parse(res.getContentText());
-    return (d.ok && d.result) ? d.result.message_id : null;
-  } catch (e) {
-    return null;
-  }
+    if (d.ok && d.result) return d.result.message_id;
+    if (res.getResponseCode() !== 200) {
+      delete payloadObj.parse_mode;
+      payloadObj.text = text.replace(/<[^>]*>/g, '');
+      var fbRes = UrlFetchApp.fetch(url, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify(payloadObj),
+        muteHttpExceptions: true
+      });
+      var fbd = JSON.parse(fbRes.getContentText());
+      if (fbd.ok && fbd.result) return fbd.result.message_id;
+    }
+  } catch (e) {}
+  return null;
 }
 
 function editTelegramMessage(chatId, messageId, text, replyMarkup, customToken) {
@@ -1862,14 +2287,6 @@ function getEffectiveBotToken(e) {
   var sheetToken = getConfigValue('TELEGRAM_BOT_TOKEN');
   if (sheetToken) return sheetToken;
   return TELEGRAM_BOT_TOKEN || "";
-}
-
-function getEffectiveGeminiKey() {
-  var prop = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  if (prop) return prop;
-  var sheetVal = getConfigValue('GEMINI_API_KEY');
-  if (sheetVal) return sheetVal;
-  return GEMINI_API_KEY || "";
 }
 
 function getEffectiveUserId(e) {
@@ -1973,7 +2390,7 @@ function jsonResponse(data) {
 }
 
 // ----------------------------------------------------------------------------
-// MENU ACTIONS
+// MENU ACTIONS GOOGLE SPREADSHEET
 // ----------------------------------------------------------------------------
 function menuOpenTxSheet() {
   var sheet = getOrCreateTxSheet();
@@ -1996,13 +2413,28 @@ function menuShowTelegramStatus() {
   var token = getEffectiveBotToken();
   var chatId = getConfigValue('TELEGRAM_CHAT_ID') || PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT_ID') || DEFAULT_CHAT_ID;
   var webhookUrl = getConfigValue('WEBHOOK_URL');
-  SpreadsheetApp.getUi().alert(
-    '🤖 Status Bot Telegram',
-    'Token Bot: ' + (token ? '✅ Terpasang (' + token.substring(0, 10) + '...)' : '❌ Belum Diatur') + '\\n' +
-    'Chat ID: ' + (chatId ? '✅ ' + chatId : '⚠️ Belum Terhubung (Buka bot & ketik /start)') + '\\n' +
-    'Status Webhook: ' + (webhookUrl ? '✅ 24 Jam Aktif' : 'ℹ️ Klik menu "Aktifkan Webhook Bot 24 Jam Otomatis"'),
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
+  
+  var statusText = 'Token Bot: ' + (token ? '✅ Terpasang (' + token.substring(0, 10) + '...)' : '❌ Belum Diatur') + '\\n' +
+                   'Chat ID: ' + (chatId ? '✅ ' + chatId : '⚠️ Belum Terhubung (Ketik /start di bot)') + '\\n' +
+                   'Target Webhook: ' + (webhookUrl ? '✅ ' + webhookUrl : '❌ Belum Terpasang') + '\\n\\n';
+                   
+  if (token) {
+    try {
+      var res = UrlFetchApp.fetch("https://api.telegram.org/bot" + token + "/getWebhookInfo", { muteHttpExceptions: true });
+      var d = JSON.parse(res.getContentText());
+      if (d.ok && d.result) {
+        statusText += '--- Status Riil Telegram ---\\n' +
+                      'URL Telegram: ' + (d.result.url || 'Tidak Ada Webhook') + '\\n' +
+                      'Pending Updates: ' + (d.result.pending_update_count || 0) + '\\n' +
+                      'Status: ' + (d.result.url ? '🟢 24 Jam Aktif' : '🔴 Non-Aktif');
+        if (d.result.last_error_message) {
+          statusText += '\\nPesan Error: ' + d.result.last_error_message;
+        }
+      }
+    } catch(e) {}
+  }
+
+  SpreadsheetApp.getUi().alert('🤖 Status Integrasi Bot Telegram 24 Jam', statusText, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function menuSetTelegramConfig() {
@@ -2017,22 +2449,9 @@ function menuSetTelegramConfig() {
   }
 }
 
-function menuSetGeminiKey() {
-  var ui = SpreadsheetApp.getUi();
-  var prompt = ui.prompt('🔑 Pengaturan Gemini API Key', 'Masukkan Gemini API Key untuk membaca foto struk secara otomatis:', ui.ButtonSet.OK_CANCEL);
-  if (prompt.getSelectedButton() == ui.Button.OK) {
-    var key = prompt.getResponseText().trim();
-    if (key) {
-      PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', key);
-      setConfigValue('GEMINI_API_KEY', key);
-      ui.alert('✅ Berhasil', 'Gemini API Key tersimpan.', ui.ButtonSet.OK);
-    }
-  }
-}
-
 function menuShowStatus() {
   var sheet = getOrCreateTxSheet();
   var rows = sheet.getLastRow() - 1;
-  SpreadsheetApp.getUi().alert('ℹ️ Status Database', 'Database Keuangan aktif dengan ' + (rows > 0 ? rows : 0) + ' transaksi.', SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert('ℹ️ Status Database', 'Database Keuangan aktif 24 jam dengan ' + (rows > 0 ? rows : 0) + ' transaksi.', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 `;

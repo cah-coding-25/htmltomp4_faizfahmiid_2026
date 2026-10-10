@@ -1776,22 +1776,35 @@ function ocrImageFromBlob(blob) {
   });
   
   var result = JSON.parse(response.getContentText());
-  if (result.id) {
-    var doc = DocumentApp.openById(result.id);
-    var text = doc.getBody().getText();
+  if (result && result.id) {
+    var text = "";
+    try {
+      var doc = DocumentApp.openById(result.id);
+      text = doc.getBody().getText();
+    } catch (docErr) {
+      try {
+        var exportRes = UrlFetchApp.fetch("https://www.googleapis.com/drive/v2/files/" + result.id + "/export?mimeType=text/plain", {
+          headers: { "Authorization": "Bearer " + ScriptApp.getOAuthToken() },
+          muteHttpExceptions: true
+        });
+        text = exportRes.getContentText();
+      } catch (exErr) {}
+    }
     
-    // Hapus file temporary
-    UrlFetchApp.fetch("https://www.googleapis.com/drive/v2/files/" + result.id, {
-      method: "delete",
-      headers: {
-        "Authorization": "Bearer " + ScriptApp.getOAuthToken()
-      },
-      muteHttpExceptions: true
-    });
+    // Hapus file temporary agar Google Drive tetap rapi
+    try {
+      UrlFetchApp.fetch("https://www.googleapis.com/drive/v2/files/" + result.id, {
+        method: "delete",
+        headers: {
+          "Authorization": "Bearer " + ScriptApp.getOAuthToken()
+        },
+        muteHttpExceptions: true
+      });
+    } catch (delErr) {}
     
-    return text;
+    return text || "";
   }
-  throw new Error("Gagal mengunggah foto ke Google Drive untuk OCR.");
+  return "";
 }
 
 function parseReceiptTextInScript(text) {

@@ -1069,10 +1069,38 @@ export default function SettingsPanel({
         }
       } catch (srvErr) {}
 
-      // 2. Direct Webhook Registration fallback ke Telegram API
-      const targetWebhookUrl = cleanUrl + (cleanUrl.includes('?') ? '&' : '?') + `token=${encodeURIComponent(cleanToken)}`;
-      const tgRes = await fetch(`https://api.telegram.org/bot${cleanToken}/setWebhook?url=${encodeURIComponent(targetWebhookUrl)}&drop_pending_updates=true`);
-      const tgData = await tgRes.json();
+      // 2. Direct Webhook Registration ke Telegram API
+      let tgOk = false;
+      let tgDesc = '';
+      if (!serverOk) {
+        try {
+          const targetWebhookUrl = cleanUrl + (cleanUrl.includes('?') ? '&' : '?') + `token=${encodeURIComponent(cleanToken)}`;
+          const tgRes = await fetch(`https://api.telegram.org/bot${cleanToken}/setWebhook?url=${encodeURIComponent(targetWebhookUrl)}&drop_pending_updates=true`);
+          if (tgRes.ok) {
+            const tgData = await tgRes.json();
+            if (tgData.ok) {
+              tgOk = true;
+            } else {
+              tgDesc = tgData.description || '';
+            }
+          }
+        } catch (tgErr: any) {
+          tgDesc = tgErr.message || '';
+        }
+      }
+
+      // Ambil detail bot jika belum terdeteksi
+      if (!botUser) {
+        try {
+          const meRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getMe`);
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData.ok && meData.result?.username) {
+              botUser = meData.result.username;
+            }
+          }
+        } catch (meErr) {}
+      }
 
       // 3. Trigger setup_telegram di Google Apps Script
       fetch(cleanUrl, {
@@ -1088,12 +1116,12 @@ export default function SettingsPanel({
         })
       }).catch(() => {});
 
-      if (tgData.ok || serverOk) {
+      if (tgOk || serverOk) {
         setWebhookStatus('success');
         setWebhookMessage(
           `🎉 Webhook 24 Jam Berhasil Diaktifkan!\n` +
-          `Bot Telegram ${botUser ? `@${botUser}` : ''} kini aktif 24 jam nonstop di Google Apps Script. ` +
-          `Anda dapat mengetik transaksi kapan saja (misal: "beli cimol 3k" atau "gaji masuk 20 juta") atau kirim foto struk belanja!`
+          `Bot Telegram ${botUser ? `@${botUser}` : ''} kini aktif 24 jam nonstop terhubung langsung ke Google Apps Script.\n` +
+          `Bot siap merespon chat seketika (contoh: "beli cimol 3k", "/saldo", "/edit") dan scan struk foto 100% gratis!`
         );
 
         setServerBotStatus({
@@ -1116,7 +1144,10 @@ export default function SettingsPanel({
         handleCheckWebhookInfo();
       } else {
         setWebhookStatus('failed');
-        setWebhookMessage(`⚠️ Telegram menolak webhook: ${tgData.description || 'Periksa token dan URL Apps Script.'}`);
+        setWebhookMessage(
+          `⚠️ Telegram menolak webhook: ${tgDesc || 'Periksa token bot dan pastikan URL Web App Apps Script valid (berakhiran /exec).'}\n\n` +
+          `💡 Cara Mudah Langsung: Buka Google Spreadsheet Anda, klik menu atas "📊 Keuangan FahKeu" > "⚡ Aktifkan Webhook Bot 24 Jam Otomatis".`
+        );
       }
     } catch (err: any) {
       setWebhookStatus('failed');
@@ -1747,34 +1778,18 @@ export default function SettingsPanel({
               )}
             </div>
 
-            {/* Tombol Utama: Hubungkan & Pasang Otomatis */}
-            <div className="p-4 bg-gradient-to-br from-blue-50/70 to-indigo-50/50 dark:from-blue-950/20 dark:to-indigo-950/20 border border-blue-100 dark:border-blue-900/50 rounded-2xl space-y-3.5">
+            {/* Pemasangan Webhook Google Apps Script 24 Jam Nonstop */}
+            <div className="p-4 bg-gradient-to-br from-indigo-50/80 via-blue-50/60 to-emerald-50/50 dark:from-indigo-950/25 dark:via-blue-950/25 dark:to-emerald-950/20 border border-indigo-100 dark:border-indigo-900/50 rounded-2xl space-y-4">
               <div className="flex items-start space-x-3">
-                <div className="p-2 bg-blue-600 text-white rounded-xl shrink-0 shadow-sm shadow-blue-500/20">
-                  <Zap className="w-4 h-4" />
+                <div className="p-2.5 bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-xl shrink-0 shadow-md shadow-indigo-500/20">
+                  <Zap className="w-5 h-5 text-amber-300" />
                 </div>
                 <div className="text-xs space-y-1">
-                  <span className="font-bold text-blue-900 dark:text-blue-200 block">
-                    Pemasangan Webhook &amp; Sinkronisasi Otomatis
+                  <span className="font-bold text-indigo-950 dark:text-indigo-100 text-sm block">
+                    Koneksi Webhook Google Apps Script 24 Jam Non-Stop
                   </span>
-                  <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed">
-                    Sistem akan memverifikasi token bot, mendeteksi Chat ID akun Anda, mendaftarkan Webhook ke Google Spreadsheet, dan menyimpan seluruh konfigurasi ke database admin tanpa perlu mengedit file Code.gs secara manual!
-                  </p>
-                </div>
-              </div>
-
-              {/* Highlight Panduan Khusus Vercel (Pilihan 2) */}
-              <div className="p-3 bg-gradient-to-r from-blue-50 via-indigo-50 to-emerald-50 dark:from-blue-950/40 dark:via-indigo-950/40 dark:to-emerald-950/30 border border-blue-200 dark:border-blue-800/60 rounded-xl flex items-start space-x-2.5 text-xs text-blue-950 dark:text-blue-200 shadow-sm">
-                <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-                <div className="flex-1 space-y-1">
-                  <p className="font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
-                    <span>⚡ Mode Hosting Vercel &amp; Webhook Cloud 24 Jam Nonstop</span>
-                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 font-semibold">
-                      Auto-Webhook
-                    </span>
-                  </p>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Website di-deploy di <b>Vercel</b> (seperti <code>fahkeucontoh.vercel.app</code>)? Cukup isi Google Spreadsheet &amp; Token Bot di atas, lalu klik <b>💾 Simpan &amp; Aktifkan Bot</b>. Sistem otomatis menghubungkan Webhook Telegram ke <b>Google Apps Script</b>. Bot akan membalas chat (misal: <code>beli bakso 29k</code>) 24 jam nonstop gratis!
+                  <p className="text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
+                    Bot Telegram merespon chat keuangan Anda secara mandiri langsung melalui Google Apps Script. <b>100% Gratis &amp; Aktif 24/7 jam</b> tanpa ketergantungan server lokal, Vercel, ataupun komputer menyala!
                   </p>
                 </div>
               </div>
@@ -1786,80 +1801,58 @@ export default function SettingsPanel({
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
                   </span>
-                  <div className="flex-1">
+                  <div className="flex-1 space-y-1">
                     <p className="font-bold flex items-center space-x-1.5">
-                      <span>🟢 Bot Telegram Aktif & Merespon Otomatis</span>
+                      <span>🟢 Bot Telegram Terhubung &amp; Aktif 24 Jam</span>
                       {serverBotStatus.botUsername && (
                         <span className="text-emerald-600 dark:text-emerald-400 font-mono text-[11px]">(@{serverBotStatus.botUsername})</span>
                       )}
                     </p>
-                    <p className="text-[11px] text-emerald-700 dark:text-emerald-300 mt-0.5">
-                      Bot siap memproses chat teks keuangan (misal: <code>beli bakso 20k</code>) dan foto struk belanja Anda secara realtime!
+                    <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                      Webhook langsung ke Google Apps Script aktif 24 jam nonstop. Siap menerima pencatatan, foto struk, edit (/edit), dan rekap kas realtime.
                     </p>
-                    {serverBotStatus.botUsername && (
-                      <div className="mt-2.5">
-                        <a
-                          href={`https://t.me/${serverBotStatus.botUsername}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-sm transition"
-                        >
-                          <span>👉 Buka Bot di Telegram (@{serverBotStatus.botUsername})</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                    )}
                   </div>
                 </div>
               ) : (
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl flex items-start space-x-2.5 text-xs text-amber-800 dark:text-amber-200">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl flex items-start space-x-2.5 text-xs text-slate-700 dark:text-slate-300">
+                  <AlertCircle className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <p className="font-bold">Bot Belum Aktif di Server</p>
-                    <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
-                      Pastikan Token terisi, lalu klik <b>💾 Simpan & Aktifkan Bot</b> atau <b>⚡ Hubungkan & Pasang Otomatis</b> agar bot langsung merespon pesan Anda.
+                    <p className="font-bold text-slate-800 dark:text-slate-100">Bot Belum Terhubung</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Pastikan Token dan URL Web App Apps Script terisi, lalu klik tombol <b>⚡ Hubungkan Bot ke Google Apps Script (24 Jam Nonstop)</b> di bawah.
                     </p>
                   </div>
                 </div>
               )}
 
-              {/* Action Buttons */}
+              {/* 2 Metode Pemasangan Praktis */}
+              <div className="p-3 bg-white/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-xl text-[11px] space-y-1.5 text-slate-600 dark:text-slate-300">
+                <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                  💡 Dua Cara Menghubungkan Bot 24 Jam:
+                </span>
+                <p>
+                  <b>1. Dari Website ini:</b> Masukkan Token Bot &amp; URL Web App Apps Script (berakhiran <code>/exec</code>), lalu klik tombol <b>⚡ Hubungkan Bot ke Google Apps Script</b> di bawah.
+                </p>
+                <p>
+                  <b>2. Langsung dari Google Spreadsheet:</b> Buka spreadsheet Anda, klik menu atas <b>📊 Keuangan FahKeu</b> &gt; <b>⚡ Aktifkan Webhook Bot 24 Jam Otomatis</b> (1-Klik otomatis tanpa perlu copy-paste URL).
+                </p>
+              </div>
+
+              {/* Action Buttons: Bersih & Terarah */}
               <div className="flex flex-wrap items-center gap-2.5 pt-1">
                 <button
                   type="button"
                   onClick={handleSetupGasWebhook}
                   disabled={isAutoSettingUp || !telegramBotToken.trim() || !googleSheetUrl.trim()}
                   className="flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 transition disabled:opacity-50"
-                  title="Paling direkomendasikan: Bot merespon chat Telegram 24 jam nonstop via Google Apps Script"
+                  title="Hubungkan Webhook Telegram langsung ke Google Apps Script 24 jam nonstop"
                 >
                   {isAutoSettingUp ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
                   ) : (
                     <Sparkles className="w-4 h-4 text-amber-300" />
                   )}
-                  <span>⚡ Pasang Webhook 24 Jam (Apps Script)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleRemoveWebhookAndSwitchToPoller}
-                  disabled={isAutoSettingUp || !telegramBotToken.trim()}
-                  className="flex items-center space-x-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md shadow-sky-600/20 transition disabled:opacity-50"
-                  title="Gunakan ini jika Apps Script belum dideploy atau ingin bot merespon instan dari server tanpa webhook"
-                >
-                  <Zap className="w-4 h-4 text-amber-300" />
-                  <span>🚀 Mode Realtime Server (Tanpa Webhook)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSyncNewBotToken}
-                  disabled={isAutoSettingUp || !telegramBotToken.trim()}
-                  className="flex items-center space-x-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition disabled:opacity-50"
-                  title="Hubungkan token bot baru dari BotFather ke sistem"
-                >
-                  <Bot className="w-4 h-4 text-white" />
-                  <span>🔗 Hubungkan Bot Baru</span>
+                  <span>⚡ Hubungkan Bot ke Google Apps Script (24 Jam Nonstop)</span>
                 </button>
 
                 {telegramBotToken && (
@@ -1904,7 +1897,7 @@ export default function SettingsPanel({
                     ) : (
                       <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
                     )}
-                    <span>🔍 Cek Status Webhook Riil</span>
+                    <span>🔍 Cek Status Webhook</span>
                   </button>
                 )}
               </div>
