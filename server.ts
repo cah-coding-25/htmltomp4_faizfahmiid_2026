@@ -3777,6 +3777,50 @@ app.get('/api/telegram/webhook-info', async (req, res) => {
   }
 });
 
+// 3c_bis. ENDPOINT BERSIHKAN ANTREAN MACET TELEGRAM (DROP PENDING UPDATES)
+app.post('/api/telegram/purge-pending-updates', async (req, res) => {
+  try {
+    const { token, googleSheetUrl } = req.body || {};
+    const cleanToken = cleanTelegramToken(token);
+    if (!cleanToken) {
+      return res.status(400).json({ success: false, message: 'Token Bot Telegram diperlukan.' });
+    }
+
+    // 1. Bersihkan antrean tertunda dengan deleteWebhook drop_pending_updates: true
+    await fetch(`https://api.telegram.org/bot${cleanToken}/deleteWebhook?drop_pending_updates=true`, {
+      signal: AbortSignal.timeout(8000)
+    }).catch(() => {});
+
+    // 2. Jika ada Google Apps Script URL, daftarkan ulang webhook secara bersih
+    const cleanUrl = (googleSheetUrl || '').trim();
+    if (cleanUrl && cleanUrl.startsWith('http') && !cleanUrl.includes('docs.google.com/spreadsheets')) {
+      const targetWebhookUrl = cleanUrl + (cleanUrl.includes('?') ? '&' : '?') + `token=${encodeURIComponent(cleanToken)}`;
+      await fetch(`https://api.telegram.org/bot${cleanToken}/setWebhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: targetWebhookUrl,
+          drop_pending_updates: true,
+          allowed_updates: ['message', 'edited_message', 'callback_query', 'channel_post']
+        }),
+        signal: AbortSignal.timeout(10000)
+      }).catch(() => {});
+    }
+
+    // 3. Ambil webhook info mutakhir
+    const infoCheck = await fetch(`https://api.telegram.org/bot${cleanToken}/getWebhookInfo`, { signal: AbortSignal.timeout(8000) });
+    const infoData: any = await infoCheck.json();
+
+    return res.json({
+      success: true,
+      message: '🧹 Seluruh antrean pesan tertunda di Telegram berhasil dibersihkan (0 pesan tertunda)! Webhook disegarkan.',
+      info: infoData.result
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || 'Gagal membersihkan antrean Telegram.' });
+  }
+});
+
 // 3d. ENDPOINT HAPUS WEBHOOK & BERALIH KE MODE REALTIME SERVER POLLER
 app.post('/api/telegram/remove-webhook', async (req, res) => {
   try {

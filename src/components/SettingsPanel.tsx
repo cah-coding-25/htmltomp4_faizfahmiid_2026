@@ -113,6 +113,7 @@ export default function SettingsPanel({
   const [serverBotStatus, setServerBotStatus] = useState<{ active: boolean; botUsername: string; chatId: string } | null>(null);
   const [webhookInfo, setWebhookInfo] = useState<{ url: string; has_custom_certificate?: boolean; pending_update_count?: number; last_error_date?: number; last_error_message?: string } | null>(null);
   const [isCheckingWebhook, setIsCheckingWebhook] = useState(false);
+  const [isPurgingPending, setIsPurgingPending] = useState(false);
 
   // Periksa status aktif bot Telegram di server backend secara periodik
   useEffect(() => {
@@ -799,6 +800,41 @@ export default function SettingsPanel({
       setWebhookMessage(`⚠️ Gagal menghubungi Telegram: ${e.message}`);
     } finally {
       setIsCheckingWebhook(false);
+    }
+  };
+
+  const handlePurgePendingUpdates = async () => {
+    const cleanToken = cleanTelegramToken(telegramBotToken);
+    if (!cleanToken) {
+      setWebhookMessage('⚠️ Masukkan Token Bot Telegram terlebih dahulu.');
+      return;
+    }
+    setIsPurgingPending(true);
+    setWebhookMessage('Sedang membersihkan antrean pesan macet di Telegram...');
+    try {
+      const res = await fetch('/api/telegram/purge-pending-updates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: cleanToken,
+          googleSheetUrl: googleSheetUrl.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWebhookStatus('success');
+        setWebhookMessage('🧹 Seluruh antrean pesan tertunda berhasil dibersihkan (0 pending updates)! Bot siap membalas seketika.');
+        if (data.info) {
+          setWebhookInfo(data.info);
+        }
+      } else {
+        setWebhookMessage(`⚠️ ${data.message || 'Gagal membersihkan antrean'}`);
+      }
+    } catch (e: any) {
+      setWebhookMessage(`⚠️ Gagal membersihkan antrean: ${e.message}`);
+    } finally {
+      setIsPurgingPending(false);
+      handleCheckWebhookInfo();
     }
   };
 
@@ -1838,7 +1874,7 @@ export default function SettingsPanel({
                 </p>
               </div>
 
-              {/* Action Buttons: Bersih & Terarah */}
+              {/* Action Buttons: Bersih, Cepat & Terarah */}
               <div className="flex flex-wrap items-center gap-2.5 pt-1">
                 <button
                   type="button"
@@ -1869,6 +1905,23 @@ export default function SettingsPanel({
                       <Send className="w-3.5 h-3.5 text-blue-500" />
                     )}
                     <span>🧪 Uji Kirim Pesan</span>
+                  </button>
+                )}
+
+                {telegramBotToken.trim() && (
+                  <button
+                    type="button"
+                    onClick={handlePurgePendingUpdates}
+                    disabled={isPurgingPending}
+                    className="flex items-center space-x-1.5 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 rounded-xl text-xs font-semibold border border-amber-200 dark:border-amber-800 transition disabled:opacity-50"
+                    title="Bersihkan antrean pesan tertunda di Telegram (drop_pending_updates) agar bot tidak lambat"
+                  >
+                    {isPurgingPending ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                    )}
+                    <span>🧹 Bersihkan Antrean Macet</span>
                   </button>
                 )}
 
@@ -1913,14 +1966,14 @@ export default function SettingsPanel({
                     <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold ${
                       webhookInfo.url 
                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300' 
-                        : (serverBotStatus.active
+                        : (serverBotStatus?.active
                           ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-300'
                           : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300')
                     }`}>
                       {webhookInfo.url 
                         ? '🟢 Webhook 24 Jam Aktif (Google Apps Script)' 
-                        : (serverBotStatus.active 
-                          ? '🔵 Mode Realtime Server Aktif (Tanpa Webhook)' 
+                        : (serverBotStatus?.active 
+                          ? '🔵 Mode Realtime Server Aktif' 
                           : '⚪ Belum Ada Webhook / Standby')}
                     </span>
                   </div>
@@ -1935,9 +1988,25 @@ export default function SettingsPanel({
                       </div>
                       <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-800">
                         <span>Pesan Tertunda di Antrian Telegram:</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-100 font-mono">
-                          {webhookInfo.pending_update_count ?? 0} pesan
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold font-mono ${
+                            (webhookInfo.pending_update_count ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-emerald-600 dark:text-emerald-400'
+                          }`}>
+                            {webhookInfo.pending_update_count ?? 0} pesan
+                          </span>
+                          {(webhookInfo.pending_update_count ?? 0) > 0 && (
+                            <button
+                              type="button"
+                              onClick={handlePurgePendingUpdates}
+                              disabled={isPurgingPending}
+                              className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded text-[10px] font-bold transition flex items-center gap-1 shadow-xs"
+                              title="Bersihkan antrean macet"
+                            >
+                              {isPurgingPending ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : null}
+                              <span>Bersihkan Antrean</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                       {webhookInfo.last_error_message && (
                         <div className="p-3 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 rounded-lg border border-rose-200 dark:border-rose-900 mt-1">
@@ -1947,7 +2016,7 @@ export default function SettingsPanel({
                           </p>
                           <p className="text-[10.5px] mt-1 font-mono leading-relaxed">{webhookInfo.last_error_message}</p>
                           <p className="text-[11px] mt-2 text-rose-800 dark:text-rose-200">
-                            💡 <b>Solusi Cepat:</b> Klik tombol <b>"🚀 Mode Realtime Server (Tanpa Webhook)"</b> di atas agar bot langsung merespon via server tanpa terhalang kendala webhook Apps Script!
+                            💡 <b>Solusi Pasti:</b> Di Google Apps Script Anda, klik <b>Terapkan (Deploy) &gt; Kelola Penerapan &gt; Edit (Pensil) &gt; Versi: Versi Baru &gt; Terapkan</b>. Pastikan hak akses <b>Siapa Saja (Anyone)</b>. Kemudian klik tombol <b>"🧹 Bersihkan Antrean Macet"</b> di atas.
                           </p>
                         </div>
                       )}
@@ -1955,10 +2024,7 @@ export default function SettingsPanel({
                   ) : (
                     <div className="space-y-2 text-[11px] text-slate-600 dark:text-slate-400">
                       <p className="leading-relaxed">
-                        Bot Anda saat ini beroperasi dalam <b>Mode Realtime Server</b> (merespon otomatis saat website berjalan).
-                      </p>
-                      <p className="leading-relaxed">
-                        Jika ingin bot merespon 24 jam nonstop bahkan saat website ditutup, pastikan Google Apps Script sudah dideploy dengan akses "Siapa saja", lalu klik tombol <b>⚡ Pasang Webhook 24 Jam (Apps Script)</b> di atas.
+                        Webhook Google Apps Script belum terpasang. Klik tombol <b>⚡ Hubungkan Bot ke Google Apps Script (24 Jam Nonstop)</b> di atas.
                       </p>
                     </div>
                   )}
@@ -2275,14 +2341,34 @@ export default function SettingsPanel({
               </div>
 
               <div>
-                <h4 className="font-bold mb-1 text-slate-900 dark:text-white">2. Langkah Pemasangan:</h4>
+                <h4 className="font-bold mb-1 text-slate-900 dark:text-white">2. Langkah Pemasangan Pertama Kali:</h4>
                 <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-200 pl-1">
-                  <li>Buat Google Spreadsheet baru, lalu buka menu <b className="text-indigo-600 dark:text-amber-300 font-bold">Ekstensi &gt; Apps Script</b>.</li>
-                  <li>Hapus semua kode bawaan, lalu <b className="text-indigo-600 dark:text-amber-300 font-bold">tempelkan (paste)</b> kode Apps Script dari box di atas.</li>
-                  <li>Klik tombol <b className="text-indigo-600 dark:text-amber-300 font-bold">Terapkan &gt; Penerapan Baru</b> (Deploy &gt; New Deployment).</li>
-                  <li>Pilih jenis <b className="text-indigo-600 dark:text-amber-300 font-bold">Aplikasi Web</b>. Atur "Siapa yang memiliki akses" menjadi <b className="text-indigo-600 dark:text-amber-300 font-bold">Siapa saja (Anyone)</b>.</li>
-                  <li>Klik <b className="text-indigo-600 dark:text-amber-300 font-bold">Terapkan</b>, lalu salin (copy) <b className="text-indigo-600 dark:text-amber-300 font-bold">URL Aplikasi Web</b> yang dihasilkan dan masukkan ke kolom URL Google Sheet di aplikasi ini.</li>
+                  <li>Buka Google Spreadsheet Anda, lalu buka menu <b className="text-indigo-600 dark:text-amber-300 font-bold">Ekstensi &gt; Apps Script</b>.</li>
+                  <li>Hapus semua kode bawaan (<kbd className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 rounded font-mono text-[10px]">Ctrl+A</kbd> &gt; Delete), lalu <b className="text-indigo-600 dark:text-amber-300 font-bold">tempelkan (paste)</b> seluruh kode Apps Script dari kotak di atas.</li>
+                  <li>Klik tombol biru <b className="text-indigo-600 dark:text-amber-300 font-bold">Terapkan &gt; Penerapan Baru</b> (Deploy &gt; New Deployment).</li>
+                  <li>Pilih jenis <b className="text-indigo-600 dark:text-amber-300 font-bold">Aplikasi Web</b> (ikon roda gigi). Atur "Jalankan sebagai" = <b>Saya (Me)</b> dan "Yang memiliki akses" WAJIB = <b className="text-emerald-600 dark:text-emerald-400 font-bold">Siapa saja (Anyone)</b>.</li>
+                  <li>Klik <b className="text-indigo-600 dark:text-amber-300 font-bold">Terapkan</b>, lalu salin (copy) <b className="text-indigo-600 dark:text-amber-300 font-bold">URL Aplikasi Web</b> yang berakhiran <code>/exec</code> dan masukkan ke kolom URL di aplikasi ini.</li>
                 </ol>
+              </div>
+
+              {/* Box Solusi Masalah Bertahun-Tahun: Rahasia Versi Baru */}
+              <div className="p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/30 border border-amber-300 dark:border-amber-800/80 rounded-xl space-y-1.5 text-[11px] text-amber-900 dark:text-amber-200">
+                <div className="flex items-center space-x-1.5 font-bold text-amber-950 dark:text-amber-300">
+                  <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>🚨 RAHASIA PENTING: Kenapa Kode Apps Script Sering Terasa Macet / Tidak Terupdate?</span>
+                </div>
+                <p className="leading-relaxed">
+                  Ini adalah masalah klasik Google Apps Script selama bertahun-tahun: Jika Anda mengedit kode di editor lalu hanya klik <b>Simpan (Ctrl+S)</b>, <b>GOOGLE TETAP MENJALANKAN KODE VERSI LAMA DI WEB APP</b>!
+                </p>
+                <div className="p-2 bg-white/80 dark:bg-slate-900/80 rounded-lg border border-amber-200 dark:border-amber-900/60 font-semibold space-y-1">
+                  <p>👉 <b>Cara Wajib Update Kode ke Versi Baru:</b></p>
+                  <p className="font-normal">
+                    Klik <b>Terapkan (Deploy)</b> &gt; <b>Kelola Penerapan (Manage deployments)</b> &gt; Klik ikon <b>Pensil (Edit)</b> &gt; Pada pilihan <b>Versi (Version)</b>: ganti menjadi <span className="bg-amber-200 dark:bg-amber-900 px-1 py-0.5 rounded font-bold">Versi Baru (New Version)</span> &gt; Klik <b>Terapkan (Deploy)</b>!
+                  </p>
+                </div>
+                <p className="text-[10.5px] text-amber-800 dark:text-amber-300">
+                  Setelah itu, kembali ke sini dan klik tombol <b>"🧹 Bersihkan Antrean Macet"</b> untuk menghapus antrean pesan lama agar bot langsung responsif &amp; kilat merespon.
+                </p>
               </div>
 
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
