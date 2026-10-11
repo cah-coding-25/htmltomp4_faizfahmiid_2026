@@ -114,6 +114,7 @@ export default function SettingsPanel({
   const [webhookInfo, setWebhookInfo] = useState<{ url: string; has_custom_certificate?: boolean; pending_update_count?: number; last_error_date?: number; last_error_message?: string } | null>(null);
   const [isCheckingWebhook, setIsCheckingWebhook] = useState(false);
   const [isPurgingPending, setIsPurgingPending] = useState(false);
+  const [codeMode, setCodeMode] = useState<'clean' | 'personalized'>('clean');
 
   // Periksa status aktif bot Telegram di server backend secara periodik
   useEffect(() => {
@@ -1029,8 +1030,11 @@ export default function SettingsPanel({
     }
   };
 
-  // Kode Google Apps Script yang otomatis disisipkan Token Bot & Chat ID pengguna
-  const personalizedCode = React.useMemo(() => {
+  // Kode Google Apps Script yang ditampilkan (pilihan Bersih Standar atau Terisi Otomatis)
+  const activeCodeToDisplay = React.useMemo(() => {
+    if (codeMode === 'clean') {
+      return GOOGLE_APPS_SCRIPT_FINANCE_CODE;
+    }
     const cleanTok = cleanTelegramToken(telegramBotToken);
     const cleanChat = telegramChatId.trim();
     let code = GOOGLE_APPS_SCRIPT_FINANCE_CODE;
@@ -1041,7 +1045,7 @@ export default function SettingsPanel({
       code = code.replace(/var DEFAULT_CHAT_ID = ".*?";/, `var DEFAULT_CHAT_ID = "${cleanChat}";`);
     }
     return code;
-  }, [telegramBotToken, telegramChatId]);
+  }, [codeMode, telegramBotToken, telegramChatId]);
 
   // Handler Pemasangan Webhook 24 Jam Nonstop ke Google Apps Script
   const handleSetupGasWebhook = async () => {
@@ -1198,7 +1202,7 @@ export default function SettingsPanel({
     // Coba navigator.clipboard
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(personalizedCode);
+        await navigator.clipboard.writeText(activeCodeToDisplay);
         success = true;
       }
     } catch (e) {
@@ -1219,7 +1223,13 @@ export default function SettingsPanel({
     }
 
     setCopied(true);
-    setCopyFeedback(success ? 'Script transaksi berhasil disalin ke clipboard (Token bot sudah terpasang di kode)!' : 'Teks telah diseleksi penuh! Tekan Ctrl+C untuk menyalin.');
+    setCopyFeedback(
+      success 
+        ? (codeMode === 'clean' 
+            ? '✅ Script Bersih (100% bebas hardcode token & ID) berhasil disalin ke clipboard!' 
+            : '✅ Script transaksi (dengan Token Bot terpasang) berhasil disalin ke clipboard!')
+        : 'Teks telah diseleksi penuh! Tekan Ctrl+C untuk menyalin.'
+    );
     setTimeout(() => {
       setCopied(false);
       setCopyFeedback('');
@@ -2312,14 +2322,56 @@ export default function SettingsPanel({
             </p>
           </div>
 
+          {/* Selector Mode Script: Bersih vs Terisi Token */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 p-3 bg-slate-50 dark:bg-slate-900/90 rounded-xl border border-slate-200 dark:border-slate-800">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                Format Script Code.gs:
+              </span>
+              <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                {codeMode === 'clean' 
+                  ? '🛡️ Mode Bersih: Bebas dari hardcode Token & ID. Sangat aman, standar internasional!' 
+                  : '⚡ Mode Terisi: Token & Chat ID otomatis terisi langsung di dalam script.'}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-950 p-1 rounded-lg border border-slate-200 dark:border-slate-800 shrink-0 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setCodeMode('clean')}
+                className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+                  codeMode === 'clean'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <span>🛡️ Script Bersih (Aman & Standar)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCodeMode('personalized')}
+                className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+                  codeMode === 'personalized'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <span>⚡ Script Terisi Token</span>
+              </button>
+            </div>
+          </div>
+
           <p className="text-[10px] text-slate-400 leading-relaxed">
-            Kode di bawah adalah script <b>financeCode.gs</b> khusus pencatatan keuangan harian, mutasi kas, kategori, dan Bot Telegram pribadi Anda.
+            {codeMode === 'clean'
+              ? 'Kode di bawah adalah versi murni standar internasional tanpa token/ID hardcode. Token akan dialirkan otomatis saat Webhook didaftarkan ke Telegram.'
+              : 'Kode di bawah telah otomatis disisipkan Token Bot dan Chat ID Anda.'}
           </p>
 
           <textarea
             ref={codeTextareaRef}
             readOnly
-            value={personalizedCode}
+            value={activeCodeToDisplay}
             className="flex-1 w-full min-h-[350px] p-3.5 bg-slate-900 text-emerald-400 font-mono text-[10px] rounded-xl border border-slate-800 focus:outline-none resize-none scrollbar-thin overflow-y-auto"
           />
 
