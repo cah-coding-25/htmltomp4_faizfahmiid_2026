@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#10b981" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="FahKeu" />
+    <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/robot.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <meta name="description" content="Aplikasi pencatat keuangan interaktif dengan antarmuka chat mirip WhatsApp/Instagram. Mendukung input bahasa alami (gaji 3jt, bakso 4k) tanpa API berbayar, integrasi Google Sheets & Bot Telegram, serta grafik analisis keuangan profesional." />
+    <meta property="og:title" content="FahKeu - Pencatat Keuangan AI" />
+    <meta property="og:description" content="Aplikasi pencatat keuangan interaktif dengan antarmuka chat mirip WhatsApp/Instagram. Mendukung input bahasa alami (gaji 3jt, bakso 4k) tanpa API berbayar, integrasi Google Sheets & Bot Telegram, serta grafik analisis keuangan profesional." />
+    <title>FahKeu - Pencatat Keuangan AI</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => console.log('Service Worker terdaftar dengan sukses:', reg.scope))
+            .catch((err) => console.warn('Pendaftaran Service Worker gagal:', err));
+        });
+      }
+    </script>
+  </body>
+</html>
+

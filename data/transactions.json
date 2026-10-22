@@ -1,0 +1,27 @@
+{
+  "usr_faiz_02": [
+    {
+      "id": "tg_1790744656198_775",
+      "date": "2026-09-30T05:04:16.198Z",
+      "type": "pengeluaran",
+      "amount": 100000,
+      "description": "Cimol",
+      "category": "Makanan & Minuman",
+      "source": "telegram",
+      "rawText": "beli cimol 100k",
+      "userId": "usr_faiz_02",
+      "username": "faiz"
+    },
+    {
+      "id": "tx_1790743948483",
+      "date": "2026-09-30T04:52:28.483Z",
+      "type": "pemasukan",
+      "amount": 5000000,
+      "description": "Gajia",
+      "category": "Gaji & Pendapatan Tetap",
+      "source": "web",
+      "userId": "usr_faiz_02",
+      "username": "faiz"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-03",
+  "todayCount": 0,
+  "dailyQuotaLimit": 999999,
+  "remainingToday": 999999,
+  "totalAllTimeCount": 0,
+  "todayFallbackCount": 0,
+  "totalFallbackCount": 0,
+  "lastUsedAt": "2026-10-03T23:32:00.922Z",
+  "lastStatus": "active_local",
+  "lastError": "",
+  "latencyMs": 27,
+  "engineName": "OCR Offline Lokal (Tesseract.js)"
+}

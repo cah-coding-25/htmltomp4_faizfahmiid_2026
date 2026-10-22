@@ -1,0 +1,6 @@
+{
+  "name": "FahKeu",
+  "description": "Aplikasi pencatat keuangan interaktif dengan antarmuka chat mirip WhatsApp/Instagram. Mendukung input bahasa alami (gaji 3jt, bakso 4k) tanpa API berbayar, integrasi Google Sheets & Bot Telegram, serta grafik analisis keuangan profesional.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
