@@ -21,3 +21,11 @@
 [2026-11-01T04:15:11+00:00] [RENDER] Completion signal not received. Using full duration 60.00s.
 [2026-11-01T04:15:22+00:00] SUCCESS contoh v2.html -> /home/runner/work/htmltomp4_faizfahmiid_2026/htmltomp4_faizfahmiid_2026/VIDEO/contoh v2.mp4 (68.87s)
 [2026-11-01T04:15:22+00:00] SUMMARY success=1, skipped=1, failed=0
+[2026-11-01T05:17:19+00:00] SKIP animasi v1.html
+[2026-11-01T05:17:19+00:00] [HTML] Explicit duration: 58.00s
+[2026-11-01T05:17:21+00:00] [BROWSER] Opening contoh v2.html
+[2026-11-01T05:17:22+00:00] [DURATION] Browser scan: animations=0.45s, media=0.00s, count=20, infinite=19
+[2026-11-01T05:17:22+00:00] [DURATION] Selected: 58.00s (HTML metadata + browser detection)
+[2026-11-01T05:18:20+00:00] [RENDER] HTML completion signal received.
+[2026-11-01T05:18:33+00:00] SUCCESS contoh v2.html -> /home/runner/work/htmltomp4_faizfahmiid_2026/htmltomp4_faizfahmiid_2026/VIDEO/contoh v2.mp4 (67.33s)
+[2026-11-01T05:18:33+00:00] SUMMARY success=1, skipped=1, failed=0
