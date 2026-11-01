@@ -22,5 +22,17 @@
     "detected_duration_seconds": 1.0,
     "duration_source": "browser animation/media detection",
     "error": null
+  },
+  {
+    "html_filename": "contoh v2.html",
+    "sha256": "28f69da65745c3a4bb423dbdf1b1f56da2c39ead368f505119bf269f2e5a6bab",
+    "status": "success",
+    "started_at": "2026-11-01T04:14:06+00:00",
+    "finished_at": "2026-11-01T04:15:22+00:00",
+    "output_filename": "contoh v2.mp4",
+    "duration_seconds": 68.867,
+    "detected_duration_seconds": 60.0,
+    "duration_source": "HTML metadata + browser detection",
+    "error": null
   }
 ]
