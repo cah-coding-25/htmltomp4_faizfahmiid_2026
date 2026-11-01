@@ -1,0 +1,783 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bahaya AI Bagi Mahasiswa | Motion Graphic</title>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --bg:#100C1D;
+  --panel:#1B1530;
+  --purple:#A47BFF;
+  --light:#D7C5FF;
+  --red:#FF5368;
+  --white:#FFFFFF;
+  --muted:#B9B0CA;
+}
+
+* {
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+html,body {
+  width:100%;
+  min-height:100%;
+}
+
+body {
+  background:#080610;
+  color:var(--white);
+  font-family:'Plus Jakarta Sans',sans-serif;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  overflow:hidden;
+}
+
+/* FIXED 9:16 CANVAS */
+.canvas {
+  position:relative;
+  width:min(100vw, calc(100vh * 9 / 16));
+  height:min(100vh, calc(100vw * 16 / 9));
+  aspect-ratio:9 / 16;
+  overflow:hidden;
+  background:var(--bg);
+  isolation:isolate;
+}
+
+/* BACKGROUND */
+.background {
+  position:absolute;
+  inset:0;
+  z-index:-3;
+  background:
+    radial-gradient(ellipse at 85% 15%,#7044B533,transparent 35%),
+    radial-gradient(ellipse at 10% 85%,#FF53681A,transparent 35%),
+    linear-gradient(145deg,#171027,#0E0B18 70%);
+}
+
+.grid {
+  position:absolute;
+  inset:0;
+  z-index:-2;
+  opacity:.18;
+  background-image:
+    linear-gradient(#FFFFFF12 1px,transparent 1px),
+    linear-gradient(90deg,#FFFFFF12 1px,transparent 1px);
+  background-size:45px 45px;
+}
+
+.ambient {
+  position:absolute;
+  width:55%;
+  aspect-ratio:1;
+  border-radius:50%;
+  filter:blur(85px);
+  background:#8555EF;
+  opacity:.12;
+  z-index:-1;
+  top:12%;
+  right:-30%;
+}
+
+.ambient.two {
+  top:auto;
+  bottom:5%;
+  left:-30%;
+  background:#FF5368;
+}
+
+/* SCENE */
+.scene {
+  position:absolute;
+  inset:0;
+  display:grid;
+  grid-template-rows:7% 12% 21% 30% 17% 13%;
+  padding:0 8%;
+  opacity:0;
+  visibility:hidden;
+  transition:opacity .65s ease;
+}
+
+.scene.active {
+  opacity:1;
+  visibility:visible;
+  z-index:2;
+}
+
+/* HEADER */
+.header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid #FFFFFF20;
+  min-width:0;
+}
+
+.brand {
+  font-size:clamp(7px,1.65vw,11px);
+  font-weight:800;
+  letter-spacing:2px;
+  color:var(--muted);
+}
+
+.scene-number {
+  font-size:clamp(8px,1.8vw,12px);
+  color:var(--light);
+  letter-spacing:2px;
+  font-weight:800;
+}
+
+/* INTRO */
+.intro {
+  display:flex;
+  flex-direction:column;
+  justify-content:end;
+  padding-bottom:10px;
+  min-height:0;
+}
+
+.eyebrow {
+  color:var(--purple);
+  font-size:clamp(8px,2vw,12px);
+  font-weight:800;
+  letter-spacing:3px;
+  margin-bottom:10px;
+}
+
+.headline {
+  font-size:clamp(29px,7.5vw,56px);
+  font-weight:900;
+  line-height:1.04;
+  letter-spacing:-1.8px;
+  text-transform:uppercase;
+  overflow-wrap:anywhere;
+}
+
+.purple {color:var(--purple)}
+.red {color:var(--red)}
+
+/* VISUAL AREA */
+.visual-area {
+  min-height:0;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  position:relative;
+  padding:12px 0;
+}
+
+.visual-area svg {
+  width:100%;
+  height:100%;
+  max-width:340px;
+  max-height:100%;
+  overflow:visible;
+}
+
+.visual-caption {
+  position:absolute;
+  bottom:7%;
+  left:0;
+  right:0;
+  text-align:center;
+  font-size:clamp(8px,1.8vw,11px);
+  color:var(--muted);
+  font-weight:800;
+  letter-spacing:2px;
+}
+
+/* DESCRIPTION */
+.description-area {
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  justify-content:start;
+  padding-top:14px;
+  border-top:1px solid #FFFFFF20;
+}
+
+.subheadline {
+  font-size:clamp(15px,4vw,25px);
+  font-weight:900;
+  line-height:1.2;
+  margin-bottom:12px;
+  text-transform:uppercase;
+}
+
+.description {
+  font-size:clamp(10px,2.7vw,15px);
+  line-height:1.75;
+  color:var(--muted);
+  max-width:100%;
+}
+
+/* FOOTER */
+.footer {
+  display:flex;
+  flex-direction:column;
+  justify-content:end;
+  padding-bottom:8%;
+  min-height:0;
+}
+
+.footer-line {
+  height:3px;
+  width:100%;
+  background:#FFFFFF20;
+  border-radius:20px;
+  overflow:hidden;
+}
+
+.progress {
+  width:0%;
+  height:100%;
+  background:var(--purple);
+  box-shadow:0 0 12px var(--purple);
+}
+
+.footer-info {
+  display:flex;
+  justify-content:space-between;
+  margin-top:12px;
+  font-size:clamp(7px,1.7vw,10px);
+  letter-spacing:1.5px;
+  color:var(--muted);
+}
+
+/* ANIMATIONS */
+.scene.active .eyebrow,
+.scene.active .headline,
+.scene.active .visual-area,
+.scene.active .description-area {
+  animation:appear .8s cubic-bezier(.2,.8,.2,1) both;
+}
+
+.scene.active .headline {animation-delay:.12s}
+.scene.active .visual-area {animation-delay:.25s}
+.scene.active .description-area {animation-delay:.4s}
+
+@keyframes appear {
+  from {
+    opacity:0;
+    transform:translateY(22px);
+  }
+  to {
+    opacity:1;
+    transform:translateY(0);
+  }
+}
+
+@keyframes float {
+  0%,100% {transform:translateY(0)}
+  50% {transform:translateY(-10px)}
+}
+
+@keyframes rotate {
+  to {transform:rotate(360deg)}
+}
+
+@keyframes pulse {
+  0%,100% {opacity:.5;transform:scale(.95)}
+  50% {opacity:1;transform:scale(1.06)}
+}
+
+@keyframes blink {
+  50% {opacity:.2}
+}
+
+.float {animation:float 3s ease-in-out infinite}
+.rotate {transform-origin:center;animation:rotate 15s linear infinite}
+.pulse {animation:pulse 2s ease-in-out infinite}
+.blink {animation:blink 1.5s infinite}
+
+/* END BRAND */
+.end-brand {
+  margin-top:14px;
+  font-size:clamp(8px,2vw,11px);
+  font-weight:900;
+  letter-spacing:2px;
+  color:var(--light);
+}
+
+/* Small screen */
+@media(max-aspect-ratio:9/16) {
+  .headline {
+    font-size:clamp(27px,7.2vw,48px);
+  }
+}
+
+</style>
+</head>
+
+<body>
+
+<main class="canvas" id="canvas">
+
+<div class="background"></div>
+<div class="grid"></div>
+<div class="ambient"></div>
+<div class="ambient two"></div>
+
+
+<!-- SCENE 1 -->
+<section class="scene active" data-duration="8000">
+
+<header class="header">
+  <span class="brand">DIGITAL GENERATION</span>
+  <span class="scene-number">01 / 06</span>
+</header>
+
+<div class="intro">
+  <div class="eyebrow">SEBUAH PERINGATAN</div>
+  <h1 class="headline">
+    KETIKA<br>
+    <span class="purple">AI</span><br>
+    MENGAMBIL ALIH?
+  </h1>
+</div>
+
+<div class="visual-area">
+<svg viewBox="0 0 340 250" fill="none">
+  <circle cx="170" cy="120" r="93"
+    stroke="#A47BFF" stroke-width="1.5"
+    stroke-dasharray="5 8" class="rotate"/>
+  <circle cx="170" cy="120" r="68"
+    fill="#A47BFF" fill-opacity=".12"
+    stroke="#A47BFF" stroke-width="2"
+    class="pulse"/>
+  <rect x="132" y="83" width="76" height="72"
+    rx="17" fill="#A47BFF"/>
+  <circle cx="153" cy="110" r="6" fill="white"/>
+  <circle cx="187" cy="110" r="6" fill="white"/>
+  <path d="M150 130Q170 147 190 130"
+    stroke="white" stroke-width="4"
+    stroke-linecap="round"/>
+  <path d="M170 83V65M132 120H110M208 120H230"
+    stroke="#D7C5FF" stroke-width="3"/>
+  <circle cx="105" cy="120" r="5" fill="#FF5368"/>
+  <circle cx="235" cy="120" r="5" fill="#FF5368"/>
+</svg>
+<div class="visual-caption">ARTIFICIAL INTELLIGENCE</div>
+</div>
+
+<div class="description-area">
+  <h2 class="subheadline">
+    Teknologi yang membantu, bisa menjadi ancaman.
+  </h2>
+  <p class="description">
+    Ketika mahasiswa terlalu bergantung pada kecerdasan
+    buatan, kemampuan berpikir mandiri perlahan bisa
+    terabaikan.
+  </p>
+</div>
+
+<footer class="footer">
+  <div class="footer-line"><div class="progress"></div></div>
+  <div class="footer-info">
+    <span>AI & HUMAN INTELLIGENCE</span>
+    <span class="clock">00:00 / 01:00</span>
+  </div>
+</footer>
+</section>
+
+
+<!-- SCENE 2 -->
+<section class="scene" data-duration="10000">
+
+<header class="header">
+  <span class="brand">THE DEPENDENCY</span>
+  <span class="scene-number">02 / 06</span>
+</header>
+
+<div class="intro">
+  <div class="eyebrow">MASALAH PERTAMA</div>
+  <h1 class="headline">
+    MAHASISWA<br>
+    MULAI <span class="red">LUPA</span><br>
+    BERPIKIR.
+  </h1>
+</div>
+
+<div class="visual-area">
+<svg viewBox="0 0 340 250" fill="none">
+  <circle cx="170" cy="65" r="24" fill="#E9AE85"/>
+  <path d="M138 100Q170 78 202 100L215 157H125Z"
+    fill="#FF5368"/>
+  <rect x="80" y="150" width="180" height="78"
+    rx="10" fill="#28203C"
+    stroke="#A47BFF" stroke-width="3"/>
+  <rect x="91" y="160" width="158" height="57"
+    rx="5" fill="#100C1D"/>
+  <text x="170" y="198" text-anchor="middle"
+    fill="#A47BFF" font-size="30" font-weight="bold">AI</text>
+  <path d="M65 230H275L290 240H50Z"
+    fill="#A47BFF"/>
+  <circle cx="238" cy="55" r="12"
+    fill="#A47BFF" class="pulse"/>
+  <circle cx="263" cy="35" r="7"
+    fill="#A47BFF"/>
+</svg>
+<div class="visual-caption">COPY • PASTE • SUBMIT</div>
+</div>
+
+<div class="description-area">
+  <h2 class="subheadline">
+    Tugas selesai. Pemahaman belum tentu.
+  </h2>
+  <p class="description">
+    Jawaban bisa didapat dalam hitungan detik.
+    Namun menyalin tanpa memahami membuat proses
+    belajar kehilangan makna.
+  </p>
+</div>
+
+<footer class="footer">
+  <div class="footer-line"><div class="progress"></div></div>
+  <div class="footer-info">
+    <span>AI & HUMAN INTELLIGENCE</span>
+    <span class="clock">00:00 / 01:00</span>
+  </div>
+</footer>
+</section>
+
+
+<!-- SCENE 3 -->
+<section class="scene" data-duration="9000">
+
+<header class="header">
+  <span class="brand">CRITICAL THINKING</span>
+  <span class="scene-number">03 / 06</span>
+</header>
+
+<div class="intro">
+  <div class="eyebrow">MASALAH KEDUA</div>
+  <h1 class="headline">
+    OTAK<br>
+    <span class="red">MALAS</span><br>
+    BEKERJA.
+  </h1>
+</div>
+
+<div class="visual-area">
+<svg viewBox="0 0 340 250" fill="none">
+  <path d="M140 48C90 15 55 80 90 108
+    C55 145 105 190 145 157
+    C175 188 220 155 202 117
+    C237 77 195 30 160 52
+    C153 42 145 42 140 48Z"
+    fill="#A47BFF" fill-opacity=".3"
+    stroke="#C6A8FF" stroke-width="4"
+    class="pulse"/>
+  <path d="M150 53V157M104 83L143 105
+    M190 83L158 105M110 139L143 120
+    M185 139L158 120"
+    stroke="#D7C5FF" stroke-width="3"
+    stroke-linecap="round"/>
+  <path d="M240 70L290 120M290 70L240 120"
+    stroke="#FF5368" stroke-width="8"
+    stroke-linecap="round"/>
+  <path d="M235 150H295"
+    stroke="#FF5368" stroke-width="3"
+    stroke-dasharray="5 5"/>
+</svg>
+<div class="visual-caption">CRITICAL THINKING OFFLINE</div>
+</div>
+
+<div class="description-area">
+  <h2 class="subheadline">
+    Jangan serahkan seluruh proses berpikir.
+  </h2>
+  <p class="description">
+    Analisis, kreativitas, pemecahan masalah, dan
+    penalaran perlu terus dilatih. AI tidak seharusnya
+    menggantikan usaha intelektual manusia.
+  </p>
+</div>
+
+<footer class="footer">
+  <div class="footer-line"><div class="progress"></div></div>
+  <div class="footer-info">
+    <span>AI & HUMAN INTELLIGENCE</span>
+    <span class="clock">00:00 / 01:00</span>
+  </div>
+</footer>
+</section>
+
+
+<!-- SCENE 4 -->
+<section class="scene" data-duration="11000">
+
+<header class="header">
+  <span class="brand">ACADEMIC INTEGRITY</span>
+  <span class="scene-number">04 / 06</span>
+</header>
+
+<div class="intro">
+  <div class="eyebrow">MASALAH KETIGA</div>
+  <h1 class="headline">
+    <span class="red">PLAGIARISME</span><br>
+    DAN<br>
+    INFORMASI<br>
+    PALSU.
+  </h1>
+</div>
+
+<div class="visual-area">
+<svg viewBox="0 0 340 250" fill="none">
+  <rect x="90" y="25" width="160" height="190"
+    rx="10" fill="#211A32"
+    stroke="#A47BFF" stroke-width="3"/>
+  <path d="M115 65H225M115 90H220
+    M115 115H225M115 140H195"
+    stroke="#B9B0CA" stroke-width="6"
+    stroke-linecap="round"/>
+  <circle cx="225" cy="175" r="36" fill="#FF5368"/>
+  <path d="M225 151V179M225 190V192"
+    stroke="white" stroke-width="7"
+    stroke-linecap="round"/>
+  <path d="M75 35L55 15M265 35L285 15"
+    stroke="#FF5368" stroke-width="3"/>
+</svg>
+<div class="visual-caption">VERIFY BEFORE YOU TRUST</div>
+</div>
+
+<div class="description-area">
+  <h2 class="subheadline">
+    AI tidak selalu memberikan kebenaran.
+  </h2>
+  <p class="description">
+    Informasi keliru, sumber fiktif, dan referensi
+    tidak valid bisa muncul. Periksa fakta dan sumber
+    sebelum menggunakannya dalam tugas akademik.
+  </p>
+</div>
+
+<footer class="footer">
+  <div class="footer-line"><div class="progress"></div></div>
+  <div class="footer-info">
+    <span>AI & HUMAN INTELLIGENCE</span>
+    <span class="clock">00:00 / 01:00</span>
+  </div>
+</footer>
+</section>
+
+
+<!-- SCENE 5 -->
+<section class="scene" data-duration="11000">
+
+<header class="header">
+  <span class="brand">FUTURE CONSEQUENCES</span>
+  <span class="scene-number">05 / 06</span>
+</header>
+
+<div class="intro">
+  <div class="eyebrow">ANCAMAN MASA DEPAN</div>
+  <h1 class="headline">
+    IPK TINGGI?<br>
+    TAPI <span class="red">TANPA</span><br>
+    KOMPETENSI?
+  </h1>
+</div>
+
+<div class="visual-area">
+<svg viewBox="0 0 340 250" fill="none">
+  <circle cx="170" cy="105" r="82"
+    stroke="#A47BFF" stroke-width="2"
+    stroke-dasharray="6 8" class="rotate"/>
+  <circle cx="170" cy="105" r="59"
+    fill="#A47BFF" fill-opacity=".12"/>
+  <path d="M95 93L170 52L245 93L170 135Z"
+    fill="#A47BFF"/>
+  <path d="M118 109V147Q170 178 222 147V109"
+    stroke="#D7C5FF" stroke-width="5"/>
+  <path d="M245 93V139"
+    stroke="#FF5368" stroke-width="4"/>
+  <circle cx="245" cy="145" r="7"
+    fill="#FF5368"/>
+  <path d="M80 205H260"
+    stroke="#FF5368" stroke-width="2"
+    stroke-dasharray="5 6"/>
+</svg>
+<div class="visual-caption">SKILLS MATTER MORE</div>
+</div>
+
+<div class="description-area">
+  <h2 class="subheadline">
+    Dunia nyata membutuhkan kemampuan.
+  </h2>
+  <p class="description">
+    Nilai akademik saja tidak cukup. Kreativitas,
+    komunikasi, adaptasi, dan kemampuan memecahkan
+    masalah tetap menjadi bekal penting.
+  </p>
+</div>
+
+<footer class="footer">
+  <div class="footer-line"><div class="progress"></div></div>
+  <div class="footer-info">
+    <span>AI & HUMAN INTELLIGENCE</span>
+    <span class="clock">00:00 / 01:00</span>
+  </div>
+</footer>
+</section>
+
+
+<!-- SCENE 6 -->
+<section class="scene" data-duration="11000">
+
+<header class="header">
+  <span class="brand">THE FINAL MESSAGE</span>
+  <span class="scene-number">06 / 06</span>
+</header>
+
+<div class="intro">
+  <div class="eyebrow">SAATNYA BERUBAH</div>
+  <h1 class="headline">
+    GUNAKAN<br>
+    <span class="purple">AI.</span><br>
+    JANGAN<br>
+    <span class="red">DIKUASAI.</span>
+  </h1>
+</div>
+
+<div class="visual-area">
+<svg viewBox="0 0 340 250" fill="none">
+  <circle cx="170" cy="115" r="91"
+    stroke="#A47BFF" stroke-width="2"
+    stroke-dasharray="6 8" class="rotate"/>
+  <circle cx="170" cy="115" r="68"
+    fill="#A47BFF" fill-opacity=".13"
+    stroke="#A47BFF" stroke-width="2"
+    class="pulse"/>
+  <path d="M133 114L159 141L210 85"
+    stroke="#D7C5FF" stroke-width="10"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
+</svg>
+<div class="visual-caption">HUMAN INTELLIGENCE FIRST</div>
+</div>
+
+<div class="description-area">
+  <h2 class="subheadline purple">
+    AI adalah alat. Manusia tetap pemikir.
+  </h2>
+  <p class="description">
+    Gunakan AI untuk belajar, verifikasi setiap
+    informasi, kembangkan ide sendiri, dan jangan
+    pernah berhenti berpikir kritis.
+  </p>
+  <div class="end-brand">BY: FAIZ_FAHMI_ID</div>
+</div>
+
+<footer class="footer">
+  <div class="footer-line"><div class="progress"></div></div>
+  <div class="footer-info">
+    <span>THINK • CREATE • VERIFY</span>
+    <span class="clock">01:00 / 01:00</span>
+  </div>
+</footer>
+</section>
+
+</main>
+
+<script>
+const scenes = [...document.querySelectorAll('.scene')];
+
+const durations = scenes.map(scene =>
+  Number(scene.dataset.duration)
+);
+
+const totalDuration = durations.reduce((a,b)=>a+b,0);
+
+let startTime = null;
+let currentScene = -1;
+let rafId = null;
+
+function formatTime(ms) {
+  const sec = Math.floor(ms / 1000);
+  return `00:${String(sec).padStart(2,'0')}`;
+}
+
+function activate(index) {
+  if(currentScene === index) return;
+
+  currentScene = index;
+
+  scenes.forEach((scene,i)=>{
+    scene.classList.toggle('active',i === index);
+  });
+}
+
+function render(timestamp) {
+  if(startTime === null) startTime = timestamp;
+
+  const elapsed = (timestamp - startTime) % totalDuration;
+
+  let accumulated = 0;
+  let index = 0;
+
+  for(let i=0;i<durations.length;i++) {
+    if(elapsed < accumulated + durations[i]) {
+      index = i;
+      break;
+    }
+    accumulated += durations[i];
+  }
+
+  activate(index);
+
+  const sceneElapsed = elapsed - accumulated;
+  const sceneProgress = sceneElapsed / durations[index];
+
+  const progress = scenes[index].querySelector('.progress');
+  const clock = scenes[index].querySelector('.clock');
+
+  progress.style.width = (sceneProgress * 100) + '%';
+  clock.textContent =
+    `${formatTime(elapsed)} / 01:00`;
+
+  rafId = requestAnimationFrame(render);
+}
+
+function play() {
+  if(rafId !== null) cancelAnimationFrame(rafId);
+
+  startTime = null;
+  currentScene = -1;
+
+  scenes.forEach(scene => {
+    const progress = scene.querySelector('.progress');
+    progress.style.width = '0%';
+  });
+
+  rafId = requestAnimationFrame(render);
+}
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden) {
+    if(rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  } else {
+    play();
+  }
+});
+
+// START AUTOMATICALLY
+play();
+
+// Pastikan durasi total tepat 60 detik
+console.assert(totalDuration === 60000,
+  'Total durasi harus tepat 60 detik');
+</script>
+
+</body>
+</html>
