@@ -1,19 +1,19 @@
 {
   "schema_version": 2,
   "files": {
-    "demo-portrait-audio.html": {
-      "html_filename": "demo-portrait-audio.html",
-      "sha256": "f51206a8a4cd0b254bdb49b9411a551561ad227b0ddc0f9794f3b0e9c05c2a5c",
-      "output_filename": "demo-portrait-audio.mp4",
+    "animasi v1.html": {
+      "html_filename": "animasi v1.html",
+      "sha256": "b158bdd62e6329c90f2a92647ae4eba68e9493efbcdadca415a66436918ec2f4",
+      "output_filename": "animasi v1.mp4",
       "status": "success",
-      "started_at": "2026-11-01T03:40:58+00:00",
-      "finished_at": "2026-11-01T03:41:17+00:00",
-      "duration_seconds": 11.421,
-      "resolution": "1080x1920",
-      "orientation": "portrait",
+      "started_at": "2026-11-01T03:57:34+00:00",
+      "finished_at": "2026-11-01T03:58:14+00:00",
+      "duration_seconds": 29.55,
+      "resolution": "1920x1080",
+      "orientation": "landscape",
       "fps": 30,
       "audio_included": true,
-      "title": "Demo Portrait Audio"
+      "title": "Bahaya AI Bagi Mahasiswa | Motion Graphic"
     }
   }
 }\n
