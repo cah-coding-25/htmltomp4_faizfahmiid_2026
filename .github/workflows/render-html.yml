@@ -1,0 +1,44 @@
+name: HTML TO MP4 RENDERER
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "HTML/**"
+      - "CONFIG/settings.json"
+      - ".github/workflows/render-html.yml"
+permissions:
+  contents: write
+concurrency:
+  group: html-to-mp4-render
+  cancel-in-progress: false
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg pulseaudio
+      - name: Render HTML files
+        run: python -m ENGINE.main
+      - name: Commit MP4 and database
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+users.noreply.github.com"
+          git add VIDEO/ DATABASE/ LOGS/
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: render HTML videos [skip ci]"
+            git push
+          fi
