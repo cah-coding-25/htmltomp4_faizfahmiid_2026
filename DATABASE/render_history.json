@@ -46,5 +46,17 @@
     "detected_duration_seconds": 58.0,
     "duration_source": "HTML metadata + browser detection",
     "error": null
+  },
+  {
+    "html_filename": "contoh v2.html",
+    "sha256": "43cc7e02434513356251e06f767f2653ee56aac818ed457279fe264f55835681",
+    "status": "success",
+    "started_at": "2026-11-01T05:37:53+00:00",
+    "finished_at": "2026-11-01T05:38:53+00:00",
+    "output_filename": "contoh v2.mp4",
+    "duration_seconds": 57.167,
+    "detected_duration_seconds": 50.0,
+    "duration_source": "HTML metadata + browser detection",
+    "error": null
   }
 ]

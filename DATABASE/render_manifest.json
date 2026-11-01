@@ -19,19 +19,19 @@
     },
     "contoh v2.html": {
       "html_filename": "contoh v2.html",
-      "sha256": "58cd789a689fc042bd433a751e381f906470b86cf7c31d784fc455050d12c20f",
+      "sha256": "43cc7e02434513356251e06f767f2653ee56aac818ed457279fe264f55835681",
       "output_filename": "contoh v2.mp4",
       "status": "success",
-      "started_at": "2026-11-01T05:17:19+00:00",
-      "finished_at": "2026-11-01T05:18:33+00:00",
-      "duration_seconds": 67.333,
-      "detected_duration_seconds": 58.0,
+      "started_at": "2026-11-01T05:37:53+00:00",
+      "finished_at": "2026-11-01T05:38:53+00:00",
+      "duration_seconds": 57.167,
+      "detected_duration_seconds": 50.0,
       "duration_source": "HTML metadata + browser detection",
       "resolution": "1080x1920",
       "orientation": "portrait",
       "fps": 30,
       "audio_included": true,
-      "title": "Bahaya AI bagi Mahasiswa | Motion Graphic"
+      "title": "AI — Ketika Pelajar Berhenti Berpikir"
     }
   }
 }
