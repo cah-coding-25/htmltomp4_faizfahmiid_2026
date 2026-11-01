@@ -3,8 +3,12 @@
     "html_filename": "animasi v1.html",
     "sha256": "b158bdd62e6329c90f2a92647ae4eba68e9493efbcdadca415a66436918ec2f4",
     "status": "success",
-    "finished_at": "2026-11-01T03:58:14+00:00",
+    "started_at": "2026-11-01T04:06:03+00:00",
+    "finished_at": "2026-11-01T04:06:08+00:00",
     "output_filename": "animasi v1.mp4",
+    "duration_seconds": 2.6,
+    "detected_duration_seconds": 1.2,
+    "duration_source": "browser animation/media detection",
     "error": null
   }
-]\n
+]
