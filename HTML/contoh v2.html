@@ -1,40 +1,1692 @@
+
 <!DOCTYPE html>
-<html lang="id" data-render-duration="60">
+<html lang="id"
+      data-render-duration="58"
+      data-render-orientation="portrait"
+      data-render-width="1080"
+      data-render-height="1920">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="render-duration" content="60">
-    <title>Test Render 60 Detik</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <style>
-        body {
-            margin: 0;
-            height: 100vh;
-            display: grid;
-            place-items: center;
-            background: #101827;
-            color: white;
-            font-family: Arial, sans-serif;
-        }
+<title>Bahaya AI bagi Mahasiswa | Motion Graphic</title>
 
-        h1 {
-            font-size: 48px;
-            animation: move 60s linear forwards;
-        }
+<!-- HTML TO MP4 ENGINE METADATA -->
+<meta name="render-duration" content="58">
+<meta name="render-orientation" content="portrait">
+<meta name="render-width" content="1080">
+<meta name="render-height" content="1920">
 
-        @keyframes move {
-            0% {
-                transform: translateX(-200px);
-                opacity: 0;
-            }
+<script>
+window.HTML_MP4_DURATION = 58;
+window.HTML_MP4_RENDER_DONE = false;
+</script>
 
-            100% {
-                transform: translateX(200px);
-                opacity: 1;
-            }
-        }
-    </style>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+/* =====================================================
+   01. GLOBAL RESET
+===================================================== */
+
+:root {
+    --bg: #10091f;
+    --panel: #211536;
+    --purple: #a78bfa;
+    --pink: #f0abfc;
+    --white: #fbf8ff;
+    --muted: #c1b4d1;
+    --lime: #c8f169;
+    --red: #ff758f;
+    --line: rgba(255,255,255,.13);
+
+    --side: 76px;
+    --content-width: 928px;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+}
+
+body {
+    color: var(--white);
+    font-family: 'DM Sans', sans-serif;
+}
+
+/* =====================================================
+   02. VIDEO STAGE
+===================================================== */
+
+#stage {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+
+    max-width: 1080px;
+    max-height: 1920px;
+
+    margin: auto;
+    overflow: hidden;
+    isolation: isolate;
+
+    background:
+        radial-gradient(
+            circle at 85% 15%,
+            rgba(117,75,175,.34),
+            transparent 35%
+        ),
+        radial-gradient(
+            circle at 10% 85%,
+            rgba(78,49,126,.30),
+            transparent 35%
+        ),
+        linear-gradient(
+            145deg,
+            #10091f,
+            #1b1030 65%,
+            #110b20
+        );
+}
+
+#stage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+
+    background-image:
+        linear-gradient(
+            rgba(255,255,255,.055) 1px,
+            transparent 1px
+        ),
+        linear-gradient(
+            90deg,
+            rgba(255,255,255,.055) 1px,
+            transparent 1px
+        );
+
+    background-size: 65px 65px;
+    opacity: .35;
+
+    mask-image:
+        linear-gradient(
+            to bottom,
+            black,
+            transparent 95%
+        );
+
+    pointer-events: none;
+}
+
+#stage::after {
+    content: "";
+    position: absolute;
+    inset: 24px;
+
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 25px;
+
+    pointer-events: none;
+    z-index: 30;
+}
+
+/* =====================================================
+   03. HEADER
+===================================================== */
+
+.header {
+    position: absolute;
+
+    top: 65px;
+    left: var(--side);
+    right: var(--side);
+
+    height: 48px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    z-index: 20;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: 2px;
+}
+
+.brand-mark {
+    width: 38px;
+    height: 38px;
+
+    display: grid;
+    place-items: center;
+
+    border-radius: 12px;
+
+    background: linear-gradient(
+        135deg,
+        #c4a4ff,
+        #7445c5
+    );
+
+    color: #160d27;
+    font-size: 22px;
+    font-weight: 900;
+}
+
+.episode {
+    color: var(--muted);
+
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 16px;
+    letter-spacing: 1.5px;
+}
+
+/* =====================================================
+   04. PROGRESS BAR
+===================================================== */
+
+.progress-area {
+    position: absolute;
+
+    top: 130px;
+    left: var(--side);
+    right: var(--side);
+
+    z-index: 20;
+}
+
+.progress-track {
+    width: 100%;
+    height: 5px;
+
+    overflow: hidden;
+
+    background: rgba(255,255,255,.15);
+    border-radius: 10px;
+}
+
+.progress-fill {
+    width: 0%;
+    height: 100%;
+
+    background: linear-gradient(
+        90deg,
+        var(--purple),
+        var(--pink),
+        var(--lime)
+    );
+}
+
+.progress-meta {
+    display: flex;
+    justify-content: space-between;
+
+    margin-top: 12px;
+
+    color: var(--muted);
+
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 16px;
+    letter-spacing: 1px;
+}
+
+/* =====================================================
+   05. SLIDE CONTAINER
+===================================================== */
+
+.slide {
+    position: absolute;
+
+    top: 205px;
+    bottom: 140px;
+
+    left: var(--side);
+    right: var(--side);
+
+    display: grid;
+
+    grid-template-rows:
+        auto
+        auto
+        minmax(0, 1fr);
+
+    align-content: center;
+
+    gap: 22px;
+
+    overflow: hidden;
+
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+
+    transform: translateY(20px);
+
+    z-index: 1;
+}
+
+.slide.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+
+    z-index: 5;
+
+    animation: slideEnter .45s ease both;
+}
+
+@keyframes slideEnter {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* =====================================================
+   06. TEXT AREA
+===================================================== */
+
+.text-area {
+    width: 100%;
+    max-width: 100%;
+
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+
+    gap: 18px;
+}
+
+.kicker {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    color: var(--pink);
+
+    font-size: 16px;
+    font-weight: 900;
+    letter-spacing: 2.5px;
+
+    text-transform: uppercase;
+}
+
+.kicker::before {
+    content: "";
+
+    width: 28px;
+    height: 3px;
+
+    flex: 0 0 28px;
+
+    background: var(--pink);
+    border-radius: 10px;
+}
+
+.heading {
+    width: 100%;
+    max-width: 100%;
+
+    color: var(--white);
+
+    font-family: 'Space Grotesk', sans-serif;
+
+    font-size: clamp(48px, 7.1vw, 82px);
+    line-height: 1.03;
+
+    letter-spacing: -3.5px;
+
+    font-weight: 700;
+
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+
+.accent {
+    color: var(--pink);
+}
+
+.green {
+    color: var(--lime);
+}
+
+.description {
+    width: 100%;
+    max-width: 850px;
+
+    color: var(--muted);
+
+    font-size: clamp(19px, 2.65vw, 27px);
+    line-height: 1.45;
+
+    font-weight: 500;
+
+    overflow-wrap: break-word;
+}
+
+.tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    max-width: 100%;
+
+    padding: 12px 18px;
+
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 30px;
+
+    color: var(--white);
+
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1px;
+
+    text-align: center;
+}
+
+/* =====================================================
+   07. ILLUSTRATION AREA
+===================================================== */
+
+.visual {
+    position: relative;
+
+    width: 100%;
+    min-height: 0;
+    height: 100%;
+
+    display: grid;
+    place-items: center;
+
+    overflow: hidden;
+}
+
+.visual svg {
+    display: block;
+
+    width: 100%;
+    height: 100%;
+
+    max-width: 100%;
+    max-height: 100%;
+
+    overflow: visible;
+}
+
+/* =====================================================
+   08. FOOTER
+===================================================== */
+
+.footer {
+    position: absolute;
+
+    bottom: 65px;
+    left: var(--side);
+    right: var(--side);
+
+    min-height: 35px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    color: #a99bb9;
+
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 15px;
+    letter-spacing: 1.3px;
+
+    z-index: 20;
+}
+
+.footer strong {
+    color: var(--pink);
+}
+
+/* =====================================================
+   09. SVG ANIMATIONS
+===================================================== */
+
+.float {
+    animation: float 3.2s ease-in-out infinite;
+}
+
+.float-delay {
+    animation: float 3.2s ease-in-out 1s infinite;
+}
+
+.pulse {
+    animation: pulse 2.4s ease-in-out infinite;
+}
+
+.spin {
+    transform-box: fill-box;
+    transform-origin: center;
+
+    animation: spin 12s linear infinite;
+}
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-14px);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: .7;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.orbit {
+    fill: none;
+
+    stroke: rgba(196,164,255,.3);
+    stroke-width: 2;
+
+    stroke-dasharray: 10 13;
+}
+
+.small-label {
+    font-family: 'DM Sans', sans-serif;
+
+    font-size: 24px;
+    font-weight: 600;
+
+    fill: var(--muted);
+}
+
+.glow {
+    filter: drop-shadow(
+        0 0 20px rgba(180,130,255,.4)
+    );
+}
+
+/* =====================================================
+   10. MOBILE FALLBACK
+===================================================== */
+
+@media (max-width: 600px) {
+
+    :root {
+        --side: 45px;
+    }
+
+    .header {
+        top: 55px;
+    }
+
+    .brand {
+        font-size: 15px;
+        gap: 8px;
+    }
+
+    .brand-mark {
+        width: 31px;
+        height: 31px;
+        font-size: 18px;
+    }
+
+    .episode {
+        font-size: 11px;
+    }
+
+    .progress-area {
+        top: 110px;
+    }
+
+    .slide {
+        top: 180px;
+        bottom: 115px;
+
+        gap: 17px;
+    }
+
+    .text-area {
+        gap: 13px;
+    }
+
+    .kicker {
+        font-size: 13px;
+    }
+
+    .heading {
+        font-size: clamp(43px, 8vw, 64px);
+        letter-spacing: -2px;
+    }
+
+    .description {
+        font-size: clamp(17px, 3vw, 22px);
+    }
+
+    .footer {
+        bottom: 48px;
+        font-size: 11px;
+    }
+
+    .tag {
+        font-size: 12px;
+        padding: 10px 14px;
+    }
+}
+
+/* =====================================================
+   11. REDUCED MOTION FALLBACK
+===================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+
+    .slide.active {
+        animation: none;
+    }
+
+    .float,
+    .float-delay,
+    .pulse,
+    .spin {
+        animation: none;
+    }
+}
+</style>
 </head>
+
 <body>
-    <h1>HTML TO MP4 ENGINE</h1>
+
+<main id="stage">
+
+    <!-- HEADER -->
+    <header class="header">
+
+        <div class="brand">
+            <div class="brand-mark">A</div>
+            <span>THINK / AGAIN</span>
+        </div>
+
+        <div class="episode">
+            EDUCATION SERIES 01
+        </div>
+
+    </header>
+
+
+    <!-- PROGRESS -->
+    <div class="progress-area">
+
+        <div class="progress-track">
+            <div
+                class="progress-fill"
+                id="progressFill">
+            </div>
+        </div>
+
+        <div class="progress-meta">
+            <span id="slideLabel">01 / 08</span>
+            <span id="timer">00:00 / 00:58</span>
+        </div>
+
+    </div>
+
+
+    <!-- =================================================
+         SLIDE 01 — HOOK | 00–07
+    ================================================== -->
+
+    <section class="slide active"
+             data-start="0"
+             data-end="7">
+
+        <div class="text-area">
+
+            <div class="kicker">
+                THE AI GENERATION
+            </div>
+
+            <h1 class="heading">
+                AI yang<br>
+                <span class="accent">berpikir.</span><br>
+                Mahasiswa<br>
+                <span class="green">menyalin?</span>
+            </h1>
+
+            <p class="description">
+                Teknologi seharusnya memperkuat kecerdasan,
+                bukan menggantikan kemampuan berpikir.
+            </p>
+
+            <span class="tag">
+                TEKNOLOGI ≠ PENGGANTI OTAK
+            </span>
+
+        </div>
+
+        <div class="visual">
+
+            <svg viewBox="0 0 800 460">
+
+                <circle cx="400" cy="220" r="165"
+                        class="orbit"/>
+
+                <circle cx="400" cy="220" r="120"
+                        fill="#a78bfa"
+                        opacity=".12"/>
+
+                <g class="float glow">
+
+                    <rect x="285" y="105"
+                          width="230" height="210"
+                          rx="48"
+                          fill="#8b5cf6"/>
+
+                    <rect x="315" y="145"
+                          width="170" height="110"
+                          rx="25"
+                          fill="#20113c"/>
+
+                    <circle cx="365" cy="198"
+                            r="13"
+                            fill="#c8f169"/>
+
+                    <circle cx="435" cy="198"
+                            r="13"
+                            fill="#c8f169"/>
+
+                    <path d="M360 235 Q400 270 440 235"
+                          fill="none"
+                          stroke="#f0abfc"
+                          stroke-width="9"
+                          stroke-linecap="round"/>
+
+                    <path d="M400 105 V75
+                             M350 105 L330 75
+                             M450 105 L470 75"
+                          stroke="#c8f169"
+                          stroke-width="8"
+                          stroke-linecap="round"/>
+
+                </g>
+
+                <g class="float-delay">
+
+                    <circle cx="170" cy="180"
+                            r="42"
+                            fill="#f0abfc"/>
+
+                    <path d="M145 175 Q170 140 195 175"
+                          fill="none"
+                          stroke="#4a245d"
+                          stroke-width="9"/>
+
+                    <circle cx="170" cy="195"
+                            r="8"
+                            fill="#4a245d"/>
+
+                </g>
+
+                <g class="float">
+
+                    <rect x="570" y="155"
+                          width="95" height="120"
+                          rx="18"
+                          fill="#c8f169"/>
+
+                    <path d="M590 185 H645
+                             M590 210 H645
+                             M590 235 H630"
+                          stroke="#24321a"
+                          stroke-width="8"
+                          stroke-linecap="round"/>
+
+                </g>
+
+            </svg>
+
+        </div>
+
+    </section>
+
+
+    <!-- =================================================
+         SLIDE 02 — DEPENDENCE | 07–14
+    ================================================== -->
+
+    <section class="slide"
+             data-start="7"
+             data-end="14">
+
+        <div class="text-area">
+
+            <div class="kicker">
+                01 / DEPENDENCE
+            </div>
+
+            <h2 class="heading">
+                Terlalu<br>
+                <span class="accent">bergantung</span><br>
+                pada AI.
+            </h2>
+
+            <p class="description">
+                Ketika semua tugas diserahkan kepada AI,
+                mahasiswa kehilangan kesempatan untuk
+                berlatih memahami dan menyelesaikan masalah.
+            </p>
+
+        </div>
+
+        <div class="visual">
+
+            <svg viewBox="0 0 800 460">
+
+                <g class="float">
+
+                    <rect x="75" y="115"
+                          width="220" height="185"
+                          rx="30"
+                          fill="#2c1c49"
+                          stroke="#a78bfa"
+                          stroke-width="4"/>
+
+                    <text x="185" y="190"
+                          text-anchor="middle"
+                          class="small-label">
+                        TUGAS
+                    </text>
+
+                    <text x="185" y="240"
+                          text-anchor="middle"
+                          fill="#fff"
+                          font-size="36"
+                          font-weight="800">
+                        ?
+                    </text>
+
+                </g>
+
+                <path d="M310 210 H470"
+                      stroke="#f0abfc"
+                      stroke-width="8"
+                      stroke-dasharray="12 14"/>
+
+                <path d="M450 190 L475 210 L450 230"
+                      fill="none"
+                      stroke="#f0abfc"
+                      stroke-width="8"
+                      stroke-linecap="round"/>
+
+                <g class="float-delay glow">
+
+                    <rect x="490" y="100"
+                          width="220" height="210"
+                          rx="35"
+                          fill="#8b5cf6"/>
+
+                    <text x="600" y="180"
+                          text-anchor="middle"
+                          fill="#fff"
+                          font-size="28"
+                          font-weight="800">
+                        AI
+                    </text>
+
+                    <text x="600" y="225"
+                          text-anchor="middle"
+                          fill="#c8f169"
+                          font-size="24"
+                          font-weight="700">
+                        JAWABAN
+                    </text>
+
+                    <circle cx="600" cy="270"
+                            r="12"
+                            fill="#c8f169"/>
+
+                </g>
+
+                <text x="400" y="385"
+                      text-anchor="middle"
+                      class="small-label">
+                    SEMUA DISERAHKAN, OTAK TIDAK TERLATIH
+                </text>
+
+            </svg>
+
+        </div>
+
+    </section>
+
+
+    <!-- =================================================
+         SLIDE 03 — CRITICAL THINKING | 14–21
+    ================================================== -->
+
+    <section class="slide"
+             data-start="14"
+             data-end="21">
+
+        <div class="text-area">
+
+            <div class="kicker">
+                02 / CRITICAL THINKING
+            </div>
+
+            <h2 class="heading">
+                Berhenti<br>
+                <span class="accent">bertanya.</span><br>
+                Berhenti<br>
+                <span class="green">berpikir.</span>
+            </h2>
+
+            <p class="description">
+                Jawaban instan bisa membuat kita melewatkan
+                proses menganalisis, membandingkan,
+                dan menguji sebuah gagasan.
+            </p>
+
+        </div>
+
+        <div class="visual">
+
+            <svg viewBox="0 0 800 460">
+
+                <g class="pulse">
+
+                    <circle cx="400" cy="210"
+                            r="145"
+                            fill="#a78bfa"
+                            opacity=".1"/>
+
+                    <circle cx="400" cy="210"
+                            r="105"
+                            fill="#a78bfa"
+                            opacity=".16"/>
+
+                </g>
+
+                <g class="float glow">
+
+                    <path d="M400 80
+                             C320 80 265 135 265 205
+                             C265 265 310 305 350 335
+                             L350 370 H450 V335
+                             C490 305 535 265 535 205
+                             C535 135 480 80 400 80Z"
+                          fill="#a78bfa"/>
+
+                    <path d="M355 370 H445
+                             M365 395 H435"
+                          stroke="#f0abfc"
+                          stroke-width="12"
+                          stroke-linecap="round"/>
+
+                    <path d="M355 185 Q400 140 445 185
+                             M355 225 Q400 270 445 225"
+                          fill="none"
+                          stroke="#25123f"
+                          stroke-width="10"
+                          stroke-linecap="round"/>
+
+                </g>
+
+                <g class="float-delay">
+
+                    <circle cx="180" cy="120"
+                            r="27"
+                            fill="#c8f169"/>
+
+                    <text x="180" y="130"
+                          text-anchor="middle"
+                          font-size="35"
+                          fill="#1b1430"
+                          font-weight="900">
+                        ?
+                    </text>
+
+                    <circle cx="620" cy="300"
+                            r="27"
+                            fill="#f0abfc"/>
+
+                    <text x="620" y="310"
+                          text-anchor="middle"
+                          font-size="35"
+                          fill="#1b1430"
+                          font-weight="900">
+                        ?
+                    </text>
+
+                </g>
+
+            </svg>
+
+        </div>
+
+    </section>
+
+
+    <!-- =================================================
+         SLIDE 04 — MISINFORMATION | 21–28
+    ================================================== -->
+
+    <section class="slide"
+             data-start="21"
+             data-end="28">
+
+        <div class="text-area">
+
+            <div class="kicker">
+                03 / MISINFORMATION
+            </div>
+
+            <h2 class="heading">
+                Tidak semua<br>
+                jawaban AI<br>
+                <span class="accent">benar.</span>
+            </h2>
+
+            <p class="description">
+                AI dapat menghasilkan informasi keliru,
+                referensi yang tidak nyata, atau fakta
+                yang terdengar meyakinkan.
+            </p>
+
+        </div>
+
+        <div class="visual">
+
+            <svg viewBox="0 0 800 460">
+
+                <g class="float">
+
+                    <rect x="160" y="75"
+                          width="480" height="300"
+                          rx="30"
+                          fill="#25183d"
+                          stroke="#f0abfc"
+                          stroke-width="3"/>
+
+                    <rect x="200" y="125"
+                          width="400" height="45"
+                          rx="10"
+                          fill="#53336e"/>
+
+                    <rect x="200" y="195"
+                          width="330" height="18"
+                          rx="8"
+                          fill="#8c76a9"/>
+
+                    <rect x="200" y="235"
+                          width="370" height="18"
+                          rx="8"
+                          fill="#8c76a9"/>
+
+                    <rect x="200" y="275"
+                          width="250" height="18"
+                          rx="8"
+                          fill="#8c76a9"/>
+
+                </g>
+
+                <g class="pulse">
+
+                    <circle cx="580" cy="320"
+                            r="76"
+                            fill="#ff758f"/>
+
+                    <path d="M580 270 V330
+                             M580 350 V355"
+                          stroke="#3b1325"
+                          stroke-width="14"
+                          stroke-linecap="round"/>
+
+                </g>
+
+                <text x="400" y="425"
+                      text-anchor="middle"
+                      fill="#ff9cae"
+                      font-size="24"
+                      font-weight="800">
+                    VERIFIKASI SEBELUM PERCAYA
+                </text>
+
+            </svg>
+
+        </div>
+
+    </section>
+
+
+    <!-- =================================================
+         SLIDE 05 — CREATIVITY | 28–35
+    ================================================== -->
+
+    <section class="slide"
+             data-start="28"
+             data-end="35">
+
+        <div class="text-area">
+
+            <div class="kicker">
+                04 / CREATIVITY
+            </div>
+
+            <h2 class="heading">
+                Kreativitas<br>
+                <span class="accent">melemah</span><br>
+                tanpa latihan.
+            </h2>
+
+            <p class="description">
+                Jika ide selalu diminta dari mesin,
+                mahasiswa bisa kehilangan kebiasaan
+                mengeksplorasi gagasan sendiri.
+            </p>
+
+        </div>
+
+        <div class="visual">
+
+            <svg viewBox="0 0 800 460">
+
+                <g class="float-delay">
+
+                    <path d="M200 290 Q120 200 220 110
+                             Q270 60 330 125"
+                          fill="none"
+                          stroke="#c8f169"
+                          stroke-width="12"
+                          stroke-linecap="round"/>
+
+                    <path d="M300 110 L340 120 L320 155"
+                          fill="none"
+                          stroke="#c8f169"
+                          stroke-width="12"
+                          stroke-linecap="round"/>
+
+                </g>
+
+                <g class="float glow">
+
+                    <circle cx="400" cy="210"
+                            r="105"
+                            fill="#8b5cf6"/>
+
+                    <path d="M400 120 L425 185 L495 185
+                             L440 225 L460 295 L400 250
+                             L340 295 L360 225 L305 185
+                             L375 185Z"
+                          fill="#c8f169"/>
+
+                </g>
+
+                <g class="float">
+
+                    <path d="M600 290 Q680 200 580 110
+                             Q530 60 470 125"
+                          fill="none"
+                          stroke="#f0abfc"
+                          stroke-width="12"
+                          stroke-linecap="round"/>
+
+                    <path d="M500 110 L460 120 L480 155"
+                          fill="none"
+                          stroke="#f0abfc"
+                          stroke-width="12"
+                          stroke-linecap="round"/>
+
+                </g>
+
+                <text x="400" y="405"
+                      text-anchor="middle"
+                      class="small-label">
+                    IDE ORISINAL LAHIR DARI LATIHAN
+                </text>
+
+            </svg>
+
+        </div>
+
+    </section>
+
+
+    <!-- =================================================
+         SLIDE 06 — ACADEMIC INTEGRITY | 35–43
+    ================================================== -->
+
+    <section class="slide"
+             data-start="35"
+             data-end="43">
+
+        <div class="text-area">
+
+            <div class="kicker">
+                05 / ACADEMIC INTEGRITY
+            </div>
+
+            <h2 class="heading">
+                Plagiarisme<br>
+                dan hilangnya<br>
+                <span class="accent">kejujuran.</span>
+            </h2>
+
+            <p class="description">
+                Mengumpulkan hasil AI sebagai karya sendiri
+                tanpa memahami, memeriksa, dan mengikuti
+                aturan akademik dapat merusak integritas.
+            </p>
+
+        </div>
+
+        <div class="visual">
+
+            <svg viewBox="0 0 800 460">
+
+                <g class="float">
+
+                    <rect x="235" y="75"
+                          width="330" height="300"
+                          rx="25"
+                          fill="#302047"
+                          stroke="#a78bfa"
+                          stroke-width="4"/>
+
+                    <path d="M290 145 H505
+                             M290 190 H505
+                             M290 235 H460
+                             M290 280 H490"
+                          stroke="#a78bfa"
+                          stroke-width="12"
+                          stroke-linecap="round"/>
+
+                </g>
+
+                <g class="pulse">
+
+                    <circle cx="570" cy="300"
+                            r="90"
+                            fill="#ff758f"/>
+
+                    <path d="M570 250 L570 310
+                             M570 340 L570 345"
+                          stroke="#381629"
+                          stroke-width="16"
+                          stroke-linecap="round"/>
+
+                </g>
+
+                <path d="M165 120 L205 160
+                         M205 120 L165 160"
+                      stroke="#ff758f"
+                      stroke-width="13"
+                      stroke-linecap="round"/>
+
+                <text x="400" y="425"
+                      text-anchor="middle"
+                      fill="#ff9cae"
+                      font-size="24"
+                      font-weight="800">
+                    PAHAMI • PERIKSA • CANTUMKAN
+                </text>
+
+            </svg>
+
+        </div>
+
+    </section>
+
+
+    <!-- =================================================
+         SLIDE 07 — RESPONSIBLE AI | 43–51
+    ================================================== -->
+
+    <section class="slide"
+             data-start="43"
+             data-end="51">
+
+        <div class="text-area">
+
+            <div class="kicker">
+                06 / RESPONSIBLE AI
+            </div>
+
+            <h2 class="heading">
+                Gunakan AI<br>
+                dengan<br>
+                <span class="green">bijak.</span>
+            </h2>
+
+            <p class="description">
+                Jadikan AI teman berdiskusi. Periksa sumber,
+                kembangkan ide sendiri, dan pahami setiap
+                jawaban sebelum menggunakannya.
+            </p>
+
+            <span class="tag">
+                AI SEBAGAI ASISTEN, BUKAN PENGGANTI
+            </span>
+
+        </div>
+
+        <div class="visual">
+
+            <svg viewBox="0 0 800 460">
+
+                <g class="float">
+
+                    <circle cx="400" cy="210"
+                            r="135"
+                            fill="#c8f169"
+                            opacity=".14"/>
+
+                    <circle cx="400" cy="210"
+                            r="95"
+                            fill="#8b5cf6"/>
+
+                    <path d="M350 210 L385 245 L455 165"
+                          fill="none"
+                          stroke="#c8f169"
+                          stroke-width="18"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"/>
+
+                </g>
+
+                <g class="float-delay">
+
+                    <circle cx="185" cy="150"
+                            r="43"
+                            fill="#f0abfc"/>
+
+                    <text x="185" y="162"
+                          text-anchor="middle"
+                          fill="#241239"
+                          font-size="34"
+                          font-weight="900">
+                        1
+                    </text>
+
+                    <circle cx="610" cy="150"
+                            r="43"
+                            fill="#c8f169"/>
+
+                    <text x="610" y="162"
+                          text-anchor="middle"
+                          fill="#241239"
+                          font-size="34"
+                          font-weight="900">
+                        2
+                    </text>
+
+                    <circle cx="400" cy="380"
+                            r="43"
+                            fill="#f0abfc"/>
+
+                    <text x="400" y="392"
+                          text-anchor="middle"
+                          fill="#241239"
+                          font-size="34"
+                          font-weight="900">
+                        3
+                    </text>
+
+                </g>
+
+                <path d="M225 160 L315 195
+                         M570 160 L485 195
+                         M400 335 V305"
+                      stroke="#fff"
+                      stroke-width="5"
+                      stroke-dasharray="8 10"
+                      opacity=".6"/>
+
+            </svg>
+
+        </div>
+
+    </section>
+
+
+    <!-- =================================================
+         SLIDE 08 — CLOSING | 51–58
+    ================================================== -->
+
+    <section class="slide"
+             data-start="51"
+             data-end="58">
+
+        <div class="text-area">
+
+            <div class="kicker">
+                THE FINAL MESSAGE
+            </div>
+
+            <h2 class="heading">
+                Jangan biarkan<br>
+                AI mengambil<br>
+                alih <span class="accent">pikiranmu.</span>
+            </h2>
+
+            <p class="description">
+                Masa depan bukan milik mereka yang sekadar
+                menggunakan AI, tetapi mereka yang mampu
+                berpikir kritis bersama teknologi.
+            </p>
+
+            <span class="tag">
+                BY: FAIZ_FAHMI_ID
+            </span>
+
+        </div>
+
+        <div class="visual">
+
+            <svg viewBox="0 0 800 460">
+
+                <g class="pulse">
+
+                    <circle cx="400" cy="210"
+                            r="155"
+                            fill="#a78bfa"
+                            opacity=".13"/>
+
+                    <circle cx="400" cy="210"
+                            r="110"
+                            fill="#8b5cf6"/>
+
+                </g>
+
+                <g class="float glow">
+
+                    <path d="M400 110
+                             C340 110 290 160 290 220
+                             C290 285 345 330 400 365
+                             C455 330 510 285 510 220
+                             C510 160 460 110 400 110Z"
+                          fill="#c8f169"/>
+
+                    <path d="M345 220 Q400 165 455 220
+                             M350 255 Q400 300 450 255"
+                          fill="none"
+                          stroke="#38234e"
+                          stroke-width="12"
+                          stroke-linecap="round"/>
+
+                </g>
+
+                <text x="400" y="430"
+                      text-anchor="middle"
+                      fill="#f0abfc"
+                      font-size="25"
+                      font-weight="900">
+                    THINK FOR YOURSELF.
+                </text>
+
+            </svg>
+
+        </div>
+
+    </section>
+
+
+    <!-- FOOTER -->
+    <footer class="footer">
+
+        <span>EDUCATION × TECHNOLOGY</span>
+
+        <strong>THINK / AGAIN</strong>
+
+    </footer>
+
+</main>
+
+
+<!-- =====================================================
+     MASTER TIMELINE ENGINE
+===================================================== -->
+
+<script>
+(() => {
+
+    "use strict";
+
+    const TOTAL_DURATION = 58;
+
+    const slides = [
+        ...document.querySelectorAll(".slide")
+    ];
+
+    const progressFill =
+        document.getElementById("progressFill");
+
+    const slideLabel =
+        document.getElementById("slideLabel");
+
+    const timer =
+        document.getElementById("timer");
+
+    let startTime = null;
+    let finished = false;
+    let currentSlide = -1;
+
+    function formatTime(seconds) {
+
+        const value = Math.floor(seconds);
+
+        const minutes = Math.floor(value / 60);
+
+        const remaining = value % 60;
+
+        return (
+            String(minutes).padStart(2, "0") +
+            ":" +
+            String(remaining).padStart(2, "0")
+        );
+    }
+
+    function showSlide(index) {
+
+        if (
+            index < 0 ||
+            index >= slides.length ||
+            index === currentSlide
+        ) {
+            return;
+        }
+
+        slides.forEach((slide, i) => {
+
+            slide.classList.toggle(
+                "active",
+                i === index
+            );
+
+        });
+
+        currentSlide = index;
+
+        slideLabel.textContent =
+            String(index + 1).padStart(2, "0") +
+            " / " +
+            String(slides.length).padStart(2, "0");
+    }
+
+    function finishRender() {
+
+        if (finished) return;
+
+        finished = true;
+
+        showSlide(slides.length - 1);
+
+        progressFill.style.width = "100%";
+
+        timer.textContent =
+            formatTime(TOTAL_DURATION) +
+            " / " +
+            formatTime(TOTAL_DURATION);
+
+        window.HTML_MP4_RENDER_DONE = true;
+
+        window.dispatchEvent(
+            new Event("html-render-done")
+        );
+
+        window.dispatchEvent(
+            new Event("render:done")
+        );
+
+        console.log(
+            "[HTML MP4 ENGINE] Completed successfully."
+        );
+    }
+
+    function validateTimeline() {
+
+        let previousEnd = 0;
+
+        slides.forEach((slide, index) => {
+
+            const start = Number(slide.dataset.start);
+            const end = Number(slide.dataset.end);
+
+            if (
+                !Number.isFinite(start) ||
+                !Number.isFinite(end) ||
+                end <= start
+            ) {
+
+                throw new Error(
+                    "Timeline slide " + (index + 1) +
+                    " tidak valid."
+                );
+            }
+
+            if (start !== previousEnd) {
+
+                throw new Error(
+                    "Ada celah atau tumpang tindih timeline " +
+                    "pada slide " + (index + 1) + "."
+                );
+            }
+
+            previousEnd = end;
+
+        });
+
+        if (previousEnd !== TOTAL_DURATION) {
+
+            throw new Error(
+                "Total timeline tidak sama dengan metadata durasi."
+            );
+        }
+    }
+
+    function update(timestamp) {
+
+        if (startTime === null) {
+            startTime = timestamp;
+        }
+
+        if (finished) return;
+
+        const elapsed = Math.min(
+            (timestamp - startTime) / 1000,
+            TOTAL_DURATION
+        );
+
+        const activeIndex = slides.findIndex(slide => {
+
+            const start = Number(slide.dataset.start);
+            const end = Number(slide.dataset.end);
+
+            return elapsed >= start && elapsed < end;
+
+        });
+
+        if (activeIndex !== -1) {
+            showSlide(activeIndex);
+        }
+
+        const percentage =
+            (elapsed / TOTAL_DURATION) * 100;
+
+        progressFill.style.width =
+            percentage + "%";
+
+        timer.textContent =
+            formatTime(elapsed) +
+            " / " +
+            formatTime(TOTAL_DURATION);
+
+        if (elapsed >= TOTAL_DURATION) {
+
+            finishRender();
+
+            return;
+        }
+
+        requestAnimationFrame(update);
+    }
+
+    function start() {
+
+        validateTimeline();
+
+        console.log(
+            "[HTML MP4 ENGINE] Timeline validated."
+        );
+
+        console.log(
+            "[HTML MP4 ENGINE] Duration: " +
+            TOTAL_DURATION + " seconds."
+        );
+
+        requestAnimationFrame(update);
+    }
+
+    window.addEventListener(
+        "load",
+        start,
+        { once: true }
+    );
+
+})();
+</script>
+
 </body>
 </html>
